@@ -1,12 +1,12 @@
 # iTraffic Server Tools - Installer Script
-# Installs SQL Server management scripts to %SystemDrive%\Scripts\iTraffic
+# Installs SQL Server management scripts to %SystemDrive%\Scripts
 # Usage: irm https://tuaiti.com.ar/scripts/itraffic | iex
 
 $ErrorActionPreference = 'Continue'
 
-$ScriptsRepo = "https://raw.githubusercontent.com/tuaititecnologia/iTrafficServerTools/main/Scripts/iTraffic"
-$ScriptsApiUrl = "https://api.github.com/repos/tuaititecnologia/iTrafficServerTools/contents/Scripts/iTraffic"
-$InstallPath = "$env:SystemDrive\Scripts\iTraffic"
+$ScriptsRepo = "https://raw.githubusercontent.com/tuaititecnologia/iTrafficServerTools/main/Scripts"
+$ScriptsApiUrl = "https://api.github.com/repos/tuaititecnologia/iTrafficServerTools/contents/Scripts"
+$InstallPath = "$env:SystemDrive\Scripts"
 
 # Check administrator
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -79,7 +79,7 @@ try {
 
 # Download each file
 foreach ($file in $allFiles) {
-    $relativePath = $file.Path -replace "^Scripts/iTraffic/", ""
+    $relativePath = $file.Path -replace "^Scripts/", ""
     $fileUrl = "$ScriptsRepo/$relativePath"
     $filePath = Join-Path $InstallPath $relativePath
     $fileDir = Split-Path $filePath -Parent
