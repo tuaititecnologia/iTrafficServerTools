@@ -100,4 +100,7 @@ foreach ($file in $allFiles) {
 Write-Host ""
 Write-Host "Installation completed! Files installed to: $InstallPath" -ForegroundColor Green
 Write-Host ""
-pause
+
+# Open Explorer in the installation folder
+Invoke-Item $InstallPath
+
