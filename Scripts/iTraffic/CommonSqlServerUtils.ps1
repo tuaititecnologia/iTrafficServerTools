@@ -1,5 +1,27 @@
 # Common SQL Server helper functions shared across scripts
 
+# Verificar si el script se está ejecutando directamente
+if ($MyInvocation.InvocationName -ne '.' -and $MyInvocation.InvocationName -ne '&') {
+    Write-Host ""
+    Write-Host "============================================" -ForegroundColor Yellow
+    Write-Host "  ADVERTENCIA" -ForegroundColor Red
+    Write-Host "============================================" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "Este archivo contiene funciones de utilidad y NO debe ejecutarse directamente." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "Para usar estas funciones, impórtelas en su script usando:" -ForegroundColor Cyan
+    Write-Host "  . .\CommonSqlServerUtils.ps1" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "O desde otra ubicación:" -ForegroundColor Cyan
+    Write-Host "  . `$PSScriptRoot\CommonSqlServerUtils.ps1" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "============================================" -ForegroundColor Yellow
+    Write-Host ""
+    
+    # Salir del script
+    exit 1
+}
+
 function Get-SQLServerInstances {
     $instances = [System.Collections.ArrayList]@()
     $serverName = $env:COMPUTERNAME
