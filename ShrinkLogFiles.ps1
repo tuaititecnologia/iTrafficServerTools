@@ -3,63 +3,20 @@
 # Usa sqlcmd para compatibilidad máxima
 # Autor: Generado automáticamente
 
-# Función para obtener instancias de SQL Server
-function Get-SQLServerInstances {
-    $instances = [System.Collections.ArrayList]@()
-    $serverName = $env:COMPUTERNAME
-    
-    # Asegurar que tenemos un nombre válido
-    if ([string]::IsNullOrEmpty($serverName)) {
-        $serverName = [System.Net.Dns]::GetHostName()
-    }
-    # Leer instancias directamente del registro de Windows
-    $regPath = "HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server\Instance Names\SQL"
-    if (Test-Path $regPath) {
-        $regProperties = Get-ItemProperty $regPath -ErrorAction SilentlyContinue
-        if ($regProperties) {
-            # Obtener todas las propiedades que son nombres de instancias
-            $regPropertyNames = $regProperties.PSObject.Properties.Name | Where-Object { 
-                $_ -ne "PSPath" -and 
-                $_ -ne "PSParentPath" -and 
-                $_ -ne "PSChildName" -and 
-                $_ -ne "PSDrive" -and 
-                $_ -ne "PSProvider" 
-            }
-            
-            foreach ($regInstanceName in $regPropertyNames) {
-                try {
-                    # Verificar que el servicio correspondiente existe y está corriendo
-                    $serviceName = if ($regInstanceName -eq "MSSQLSERVER") { 
-                        "MSSQLSERVER" 
-                    } else { 
-                        "MSSQL`$$regInstanceName" 
-                    }
-                    
-                    $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
-                    
-                    if ($service -and $service.Status -eq 'Running') {
-                        # Construir el nombre completo de la instancia
-                        if ($regInstanceName -eq "MSSQLSERVER") {
-                            $instanceName = $serverName
-                        } else {
-                            $instanceName = "$serverName\$regInstanceName"
-                        }
-                        
-                        # Agregar si no está duplicada
-                        if ($instances -notcontains $instanceName) {
-                            [void]$instances.Add($instanceName)
-                        }
-                    }
-                } catch {
-                    # Ignorar instancias del registro que no tienen servicio correspondiente
-                    continue
-                }
-            }
-        }
-    }
-    
-    return $instances.ToArray()
+if (-not (Get-Command sqlcmd -ErrorAction SilentlyContinue)) {
+    Write-Host "No se encontró la utilidad sqlcmd. Instale SQL Server Command Line Utilities o el Feature Pack." -ForegroundColor Red
+    pause
+    exit
 }
+
+$commonLibraryPath = Join-Path -Path $PSScriptRoot -ChildPath 'CommonSqlServerUtils.ps1'
+if (-not (Test-Path $commonLibraryPath)) {
+    Write-Host "No se encontró la librería requerida: $commonLibraryPath" -ForegroundColor Red
+    pause
+    exit
+}
+
+. $commonLibraryPath
 
 # Función para obtener bases de datos y sus tamaños
 function Get-DatabaseFileSizes {
@@ -81,21 +38,11 @@ ORDER BY DB_NAME(database_id), type_desc
     
     $databases = @{}
     
+    $results = @()
+
     try {
-        # Usar sqlcmd con formato tabular
-        $tempFile = [System.IO.Path]::GetTempFileName()
-        $queryFile = $tempFile + ".sql"
-        $query | Out-File -FilePath $queryFile -Encoding UTF8
-        
-        # Ejecutar sqlcmd con formato tabular separado por tabs
-        $output = & sqlcmd -S $ServerInstance -i $queryFile -W -h -1 -s "`t" -w 1000 2>&1
-        Remove-Item $queryFile -ErrorAction SilentlyContinue
-        Remove-Item $tempFile -ErrorAction SilentlyContinue
-        
-        if ($LASTEXITCODE -ne 0) {
-            throw "Error ejecutando sqlcmd: $output"
-        }
-        
+        $output = Invoke-SqlcmdQuery -ServerInstance $ServerInstance -Query $query
+
         # Parsear resultados tabulares (saltar líneas de encabezado, separadores y vacías)
         $results = $output | Where-Object { 
             $_ -and 
@@ -133,28 +80,28 @@ ORDER BY DB_NAME(database_id), type_desc
                 }
             }
         }
-        
-        foreach ($row in $results) {
-            if (-not $databases.ContainsKey($row.DatabaseName)) {
-                $databases[$row.DatabaseName] = @{
-                    MDFSize = 0
-                    LDFSize = 0
-                    MDFFiles = @()
-                    LDFFiles = @()
-                }
-            }
-            
-            if ($row.FileType -eq "ROWS") {
-                $databases[$row.DatabaseName].MDFSize += $row.SizeMB
-                $databases[$row.DatabaseName].MDFFiles += $row.LogicalFileName
-            } elseif ($row.FileType -eq "LOG") {
-                $databases[$row.DatabaseName].LDFSize += $row.SizeMB
-                $databases[$row.DatabaseName].LDFFiles += $row.LogicalFileName
-            }
-        }
     } catch {
         Write-Host "Error obteniendo información de archivos: $($_.Exception.Message)" -ForegroundColor Red
         throw
+    }
+
+    foreach ($row in $results) {
+        if (-not $databases.ContainsKey($row.DatabaseName)) {
+            $databases[$row.DatabaseName] = @{
+                MDFSize = 0
+                LDFSize = 0
+                MDFFiles = @()
+                LDFFiles = @()
+            }
+        }
+        
+        if ($row.FileType -eq "ROWS") {
+            $databases[$row.DatabaseName].MDFSize += $row.SizeMB
+            $databases[$row.DatabaseName].MDFFiles += $row.LogicalFileName
+        } elseif ($row.FileType -eq "LOG") {
+            $databases[$row.DatabaseName].LDFSize += $row.SizeMB
+            $databases[$row.DatabaseName].LDFFiles += $row.LogicalFileName
+        }
     }
     
     return $databases
@@ -213,23 +160,14 @@ function Invoke-ShrinkLogFile {
     
     Write-Host "  Script SQL modificado con nombre de base de datos: $DatabaseName" -ForegroundColor Gray
     
-    # Crear archivo temporal con el script modificado
-    $tempScript = [System.IO.Path]::GetTempFileName() + ".sql"
-    $sqlScript | Out-File -FilePath $tempScript -Encoding UTF8 -NoNewline
-    
     try {
         Write-Host "Ejecutando script de reducción para base de datos: $DatabaseName" -ForegroundColor Yellow
         
-        $output = & sqlcmd -S $ServerInstance -i $tempScript -b 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            throw "Error ejecutando sqlcmd: $output"
-        }
+        Invoke-SqlcmdQuery -ServerInstance $ServerInstance -Query $sqlScript | Out-Null
         Write-Host "Script ejecutado correctamente" -ForegroundColor Green
     } catch {
         Write-Host "Error ejecutando script: $($_.Exception.Message)" -ForegroundColor Red
         throw
-    } finally {
-        Remove-Item $tempScript -ErrorAction SilentlyContinue
     }
 }
 
