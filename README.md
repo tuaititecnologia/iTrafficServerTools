@@ -26,50 +26,8 @@ irm https://raw.githubusercontent.com/tuaititecnologia/iTrafficServerTools/main/
 2. Copia todos los archivos de la carpeta `scripts/iTraffic/` a `%SystemDrive%\Scripts\iTraffic`
 3. Asegúrate de que `sqlcmd` esté disponible en el sistema
 
-## 📋 Scripts Incluidos
 
-### `SetAllDatabasesToFullRecovery.ps1`
-Establece todas las bases de datos de usuario en modo de recuperación FULL.
-
-**Características:**
-- Detecta automáticamente instancias de SQL Server
-- Muestra el estado actual de recuperación de cada base de datos
-- Permite confirmación antes de realizar cambios
-- Usa `sqlcmd` para máxima compatibilidad
-
-**Uso:**
-```powershell
-& "$env:SystemDrive\Scripts\iTraffic\SetAllDatabasesToFullRecovery.ps1"
-```
-
-### `ShrinkLogFiles.ps1`
-Reduce archivos LDF (archivos de log) excesivos en SQL Server.
-
-**Características:**
-- Detecta bases de datos con archivos LDF > 100 MB y > 10% del tamaño MDF
-- Cambia temporalmente a modo SIMPLE para reducir el log
-- Restaura el modo FULL después de la reducción
-- Muestra estadísticas antes y después de la operación
-
-**Uso:**
-```powershell
-& "$env:SystemDrive\Scripts\iTraffic\ShrinkLogFiles.ps1"
-```
-
-### `CleanUp.ps1`
-Script de limpieza de logs y archivos temporales específico para entornos iTraffic.
-
-**Uso:**
-```powershell
-& "$env:SystemDrive\Scripts\iTraffic\CleanUp.ps1"
-```
-
-### `CommonSqlServerUtils.ps1`
-Librería común con funciones compartidas:
-- `Get-SQLServerInstances`: Detecta instancias de SQL Server en el sistema
-- `Invoke-SqlcmdQuery`: Ejecuta consultas SQL usando `sqlcmd`
-
-Este archivo se carga automáticamente por los otros scripts.
+📖 **[Ver documentación completa](./docs/README.md)**
 
 ## 🔧 Requisitos
 
@@ -82,30 +40,31 @@ Este archivo se carga automáticamente por los otros scripts.
 
 ```
 iTrafficServerTools/
-├── scripts/              # Scripts organizados por categoría
-│   └── iTraffic/         # Scripts de iTraffic (se instalan en %SystemDrive%\Scripts\iTraffic)
-│       ├── CommonSqlServerUtils.ps1
-│       ├── SetAllDatabasesToFullRecovery.ps1
-│       ├── ShrinkLogFiles.ps1
-│       └── CleanUp.ps1
-├── web/                  # Archivos para el servidor web
-│   ├── install.ps1      # Instalador (se sube a tuaiti.com.ar/scripts/itraffic)
-│   └── index.php        # Endpoint PHP que sirve install.ps1
+├── Scripts/iTraffic/    # Scripts principales
+├── web/                 # Instalador web
+├── docs/                # Documentación completa
 └── README.md
 ```
 
-## 📝 Notas
+## 📝 Uso Rápido
 
-- Todos los scripts requieren ejecutarse como **Administrador**
-- Los scripts usan `sqlcmd` en lugar de módulos de PowerShell para máxima compatibilidad
-- Los scripts detectan automáticamente las instancias de SQL Server disponibles
-- Se excluyen automáticamente las bases de datos del sistema (master, tempdb, model, msdb)
-- El instalador detecta automáticamente todos los scripts disponibles en el repositorio
+```powershell
+# Ejecutar cualquier script
+& C:\Scripts\iTraffic\NombreDelScript.ps1
+```
+
+**Nota:** Todos los scripts requieren ejecutarse como **Administrador**
+
+## 📚 Documentación
+
+Para información detallada sobre cada script, casos de uso y solución de problemas, consulta la **[documentación completa](./docs/README.md)**.
 
 ## 🔗 Enlaces
 
-- Repositorio: [https://github.com/tuaititecnologia/iTrafficServerTools](https://github.com/tuaititecnologia/iTrafficServerTools)
-- Instalador: [https://tuaiti.com.ar/scripts/itraffic](https://tuaiti.com.ar/scripts/itraffic)
+- **Documentación:** [./docs/README.md](./docs/README.md)
+- **Repositorio:** [https://github.com/tuaititecnologia/iTrafficServerTools](https://github.com/tuaititecnologia/iTrafficServerTools)
+- **Instalador:** [https://tuaiti.com.ar/scripts/itraffic](https://tuaiti.com.ar/scripts/itraffic)
+- **iTraffic:** [https://www.softur.com.ar](https://www.softur.com.ar)
 
 ## 📄 Licencia
 
