@@ -27,6 +27,10 @@ irm https://raw.githubusercontent.com/tuaititecnologia/iTrafficServerTools/main/
 3. Asegúrate de que `sqlcmd` esté disponible en el sistema
 
 
+### Scripts de Actualización
+
+- **`Update.ps1`** - Actualiza todos los scripts a la última versión
+
 📖 **[Ver documentación completa](./docs/README.md)**
 
 ## 🔧 Requisitos

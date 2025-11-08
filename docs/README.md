@@ -23,15 +23,15 @@ Scripts principales para administración de SQL Server y limpieza del sistema:
 4. **[CommonSqlServerUtils.ps1](./scripts/itraffic/CommonSqlServerUtils.md)**  
    Librería común con funciones compartidas para SQL Server
 
-### 🌐 Scripts Web
+### 🔄 Scripts de Actualización
 
-Scripts para distribución y actualización remota:
+1. **[Update.ps1](./scripts/Update.md)**  
+   Script de actualización de herramientas
+
+### 🌐 Instalador Web
 
 1. **[install.ps1](./scripts/web/install.md)**  
    Instalador automático desde repositorio remoto
-   
-2. **[Update.ps1](./scripts/Update.md)**  
-   Script de actualización de herramientas
 
 ## 🔧 Requisitos del Sistema
 
