@@ -72,11 +72,27 @@ Este proyecto está bajo licencia MIT (o la licencia que corresponda).
 
 ## ℹ️ Acerca de iTraffic
 
-**iTraffic** es un sistema de gestión de tránsito desarrollado por [Softur](https://www.softur.com.ar). Estas herramientas han sido diseñadas específicamente para facilitar el mantenimiento y administración de servidores que ejecutan iTraffic.
+**[iTraffic](https://softur.com.ar/productos/itraffic)** es un sistema integral de gestión turística desarrollado por [Softur](https://www.softur.com.ar), diseñado específicamente para agencias de viajes y operadores turísticos.
+
+### ¿Qué hace iTraffic?
+
+iTraffic proporciona una solución completa para gestionar todos los aspectos de una empresa turística:
+
+- **Gestión de Reservas y Ventas** - Excursiones, traslados, hotelería, paquetes y servicios
+- **Operaciones** - Control de cupos, vouchers, pedidos a proveedores y despachos
+- **Mesa de Tráfico** - Asignación de guías, vehículos y planificación de servicios
+- **Administración** - Facturación electrónica, cobros, pagos, estados de cuenta
+- **Tarifarios** - Gestión completa de precios, cupos y productos propios y de terceros
+- **Informes y Estadísticas** - Más de 250 tipos de reportes para análisis y control
+
+### Estas Herramientas
+
+Los scripts de este repositorio han sido diseñados específicamente para facilitar el **mantenimiento y administración de los servidores SQL Server** que ejecutan iTraffic, optimizando el rendimiento y liberando espacio en disco.
 
 ## ⚠️ Advertencia
 
-- Siempre realiza backups antes de ejecutar scripts que modifican bases de datos
-- Prueba los scripts en un entorno de desarrollo antes de usarlos en producción
-- Verifica que tienes los permisos necesarios antes de ejecutar los scripts
+> ⚠️ **IMPORTANTE: DESCARGO DE RESPONSABILIDAD**
+
+> El uso de estos scripts es bajo tu propia responsabilidad. Ni los autores, Ni Alejandro Ismael Sanchez (Tuaiti Tecnología) ni Softur S.A. se hacen responsables por la pérdida de información, daños, borrado de archivos o cualquier consecuencia resultante del uso de estas herramientas.  
+> **Asegúrate siempre de realizar backups actualizados antes de ejecutar cualquier script. Testea en entornos de desarrollo cuando sea posible.**
 
