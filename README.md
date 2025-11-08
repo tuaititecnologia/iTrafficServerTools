@@ -1,6 +1,8 @@
 # iTraffic Server Tools
 
-Herramientas de PowerShell para administración de SQL Server. Scripts compatibles con Windows Server 2012 R2 y versiones posteriores, usando `sqlcmd` para máxima compatibilidad.
+Herramientas de PowerShell para administración de servidores **iTraffic de Softur** ([www.softur.com.ar](https://www.softur.com.ar)).
+
+Scripts de mantenimiento y optimización para SQL Server, compatibles con Windows Server 2012 R2 y versiones posteriores, usando `sqlcmd` para máxima compatibilidad.
 
 ## 📦 Instalación
 
@@ -55,7 +57,7 @@ Reduce archivos LDF (archivos de log) excesivos en SQL Server.
 ```
 
 ### `CleanUp.ps1`
-Script de limpieza para SQL Server (ver archivo para detalles específicos).
+Script de limpieza de logs y archivos temporales específico para entornos iTraffic.
 
 **Uso:**
 ```powershell
@@ -108,6 +110,10 @@ iTrafficServerTools/
 ## 📄 Licencia
 
 Este proyecto está bajo licencia MIT (o la licencia que corresponda).
+
+## ℹ️ Acerca de iTraffic
+
+**iTraffic** es un sistema de gestión de tránsito desarrollado por [Softur](https://www.softur.com.ar). Estas herramientas han sido diseñadas específicamente para facilitar el mantenimiento y administración de servidores que ejecutan iTraffic.
 
 ## ⚠️ Advertencia
 
