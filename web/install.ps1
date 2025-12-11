@@ -26,18 +26,6 @@ if (-not (Test-Path $InstallPath)) {
     New-Item -ItemType Directory -Path $InstallPath -Force | Out-Null
 }
 
-# Remove old iTraffic folder if it exists (replaced by Tools)
-$oldItrafficPath = Join-Path $InstallPath "iTraffic"
-if (Test-Path $oldItrafficPath) {
-    Write-Host "Removing old 'iTraffic' folder (replaced by 'Tools')..." -ForegroundColor Yellow
-    try {
-        Remove-Item -Path $oldItrafficPath -Recurse -Force
-        Write-Host "  OK - Old 'iTraffic' folder removed" -ForegroundColor Green
-    } catch {
-        Write-Host "  WARNING - Could not remove old 'iTraffic' folder: $($_.Exception.Message)" -ForegroundColor Yellow
-    }
-}
-
 # Function to recursively get all files from GitHub
 function Get-AllFiles {
     param(
@@ -106,6 +94,21 @@ foreach ($file in $allFiles) {
         Write-Host "  OK $relativePath" -ForegroundColor Green
     } catch {
         Write-Host "  ERROR $relativePath - $($_.Exception.Message)" -ForegroundColor Red
+    }
+}
+
+# Remove old iTraffic folder if it exists (replaced by Tools)
+# This is done AFTER downloading files so the new version of this script is already installed
+$oldItrafficPath = Join-Path $InstallPath "iTraffic"
+if (Test-Path $oldItrafficPath) {
+    Write-Host ""
+    Write-Host "Removing old 'iTraffic' folder (replaced by 'Tools')..." -ForegroundColor Yellow
+    try {
+        Remove-Item -Path $oldItrafficPath -Recurse -Force
+        Write-Host "  OK - Old 'iTraffic' folder removed" -ForegroundColor Green
+    } catch {
+        Write-Host "  WARNING - Could not remove old 'iTraffic' folder: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "  The folder will be removed on the next update." -ForegroundColor Yellow
     }
 }
 
