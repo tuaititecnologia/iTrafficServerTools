@@ -78,11 +78,13 @@ Write-Host ""
 Write-Host "Configurando exclusiones para IIS..." -ForegroundColor Yellow
 
 # Directorio de sitios web (incluye logs automáticamente)
-try {
-    Add-MpPreference -ExclusionPath "C:\inetpub" -ErrorAction Stop
-    Write-Host "  [OK] Excluido: C:\inetpub" -ForegroundColor Green
-} catch {
-    Write-Host "  [ADVERTENCIA] No se pudo excluir C:\inetpub : $($_.Exception.Message)" -ForegroundColor Yellow
+if (Test-Path "C:\inetpub") {
+    try {
+        Add-MpPreference -ExclusionPath "C:\inetpub" -ErrorAction Stop
+        Write-Host "  [OK] Excluido: C:\inetpub" -ForegroundColor Green
+    } catch {
+        Write-Host "  [ADVERTENCIA] No se pudo excluir C:\inetpub : $($_.Exception.Message)" -ForegroundColor Yellow
+    }
 }
 
 # Directorios de configuración y binarios de IIS (según recomendaciones de Microsoft)
