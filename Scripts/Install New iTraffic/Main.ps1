@@ -31,9 +31,10 @@ Write-Host "4 - IIS" -ForegroundColor Yellow
 Write-Host "5 - Users" -ForegroundColor Yellow
 Write-Host "6 - ComputerRename" -ForegroundColor Yellow
 Write-Host "7 - Activate" -ForegroundColor Yellow
+Write-Host "8 - AntivirusConfig" -ForegroundColor Yellow
 Write-Host "=========================================" -ForegroundColor DarkGray
 
-$opcion = Read-Host "Ingresá una opción (U/A/1-6)"
+$opcion = Read-Host "Ingresá una opción (U/A/1-8)"
 
 switch ($opcion) {
     "A" {
@@ -44,6 +45,7 @@ switch ($opcion) {
         . .\Users.ps1
         . .\ComputerRename.ps1
         . .\Activate.ps1
+        . .\AntivirusConfig.ps1
     }
     "U" { . .\Update.ps1 }
     "1" { . .\Utilities.ps1 }
@@ -53,6 +55,7 @@ switch ($opcion) {
     "5" { . .\Users.ps1 }
     "6" { . .\ComputerRename.ps1 }
     "7" { . .\Activate.ps1 }
+    "8" { . .\AntivirusConfig.ps1 }
     default {
         Write-Host "Opción inválida. Finalizando." -ForegroundColor Red
         exit

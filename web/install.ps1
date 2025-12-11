@@ -103,12 +103,38 @@ $oldItrafficPath = Join-Path $InstallPath "iTraffic"
 if (Test-Path $oldItrafficPath) {
     Write-Host ""
     Write-Host "Removing old 'iTraffic' folder (replaced by 'Tools')..." -ForegroundColor Yellow
+    
+    # Check if any PowerShell processes are using files from the old folder
+    $filesInUse = $false
     try {
-        Remove-Item -Path $oldItrafficPath -Recurse -Force
-        Write-Host "  OK - Old 'iTraffic' folder removed" -ForegroundColor Green
+        $oldFolderFiles = Get-ChildItem -Path $oldItrafficPath -Recurse -File -ErrorAction SilentlyContinue
+        foreach ($file in $oldFolderFiles) {
+            try {
+                # Try to open the file exclusively to check if it's in use
+                $fileStream = [System.IO.File]::Open($file.FullName, 'Open', 'ReadWrite', 'None')
+                $fileStream.Close()
+            } catch {
+                $filesInUse = $true
+                break
+            }
+        }
     } catch {
-        Write-Host "  WARNING - Could not remove old 'iTraffic' folder: $($_.Exception.Message)" -ForegroundColor Yellow
-        Write-Host "  The folder will be removed on the next update." -ForegroundColor Yellow
+        # If we can't check, assume files might be in use
+        $filesInUse = $true
+    }
+    
+    if ($filesInUse) {
+        Write-Host "  WARNING - Some files in 'iTraffic' folder are in use." -ForegroundColor Yellow
+        Write-Host "  Please close any scripts that might be running from that folder." -ForegroundColor Yellow
+        Write-Host "  The folder will be removed on the next update when files are not in use." -ForegroundColor Yellow
+    } else {
+        try {
+            Remove-Item -Path $oldItrafficPath -Recurse -Force -ErrorAction Stop
+            Write-Host "  OK - Old 'iTraffic' folder removed" -ForegroundColor Green
+        } catch {
+            Write-Host "  WARNING - Could not remove old 'iTraffic' folder: $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-Host "  The folder will be removed on the next update." -ForegroundColor Yellow
+        }
     }
 }
 
