@@ -26,6 +26,47 @@ if (-not (Test-Path $InstallPath)) {
     New-Item -ItemType Directory -Path $InstallPath -Force | Out-Null
 }
 
+# Remove all existing files and folders before installing new version
+# This ensures we don't have orphaned files from moved/renamed folders
+if (Test-Path $InstallPath) {
+    Write-Host "Removing existing installation..." -ForegroundColor Yellow
+    
+    # Check if any PowerShell processes are using files from the installation folder
+    $filesInUse = $false
+    try {
+        $existingFiles = Get-ChildItem -Path $InstallPath -Recurse -File -ErrorAction SilentlyContinue
+        foreach ($file in $existingFiles) {
+            try {
+                # Try to open the file exclusively to check if it's in use
+                $fileStream = [System.IO.File]::Open($file.FullName, 'Open', 'ReadWrite', 'None')
+                $fileStream.Close()
+            } catch {
+                $filesInUse = $true
+                break
+            }
+        }
+    } catch {
+        # If we can't check, assume files might be in use
+        $filesInUse = $true
+    }
+    
+    if ($filesInUse) {
+        Write-Host "  WARNING - Some files are in use. Skipping cleanup." -ForegroundColor Yellow
+        Write-Host "  Please close any scripts that might be running from $InstallPath" -ForegroundColor Yellow
+        Write-Host "  Old files may remain. Consider running the installer again after closing scripts." -ForegroundColor Yellow
+    } else {
+        try {
+            # Remove all contents but keep the directory itself
+            Get-ChildItem -Path $InstallPath -Recurse | Remove-Item -Recurse -Force -ErrorAction Stop
+            Write-Host "  OK - Existing installation removed" -ForegroundColor Green
+        } catch {
+            Write-Host "  WARNING - Could not remove existing files: $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-Host "  Installation will continue, but old files may remain." -ForegroundColor Yellow
+        }
+    }
+    Write-Host ""
+}
+
 # Function to recursively get all files from GitHub
 function Get-AllFiles {
     param(
@@ -94,47 +135,6 @@ foreach ($file in $allFiles) {
         Write-Host "  OK $relativePath" -ForegroundColor Green
     } catch {
         Write-Host "  ERROR $relativePath - $($_.Exception.Message)" -ForegroundColor Red
-    }
-}
-
-# Remove old iTraffic folder if it exists (replaced by Tools)
-# This is done AFTER downloading files so the new version of this script is already installed
-$oldItrafficPath = Join-Path $InstallPath "iTraffic"
-if (Test-Path $oldItrafficPath) {
-    Write-Host ""
-    Write-Host "Removing old 'iTraffic' folder (replaced by 'Tools')..." -ForegroundColor Yellow
-    
-    # Check if any PowerShell processes are using files from the old folder
-    $filesInUse = $false
-    try {
-        $oldFolderFiles = Get-ChildItem -Path $oldItrafficPath -Recurse -File -ErrorAction SilentlyContinue
-        foreach ($file in $oldFolderFiles) {
-            try {
-                # Try to open the file exclusively to check if it's in use
-                $fileStream = [System.IO.File]::Open($file.FullName, 'Open', 'ReadWrite', 'None')
-                $fileStream.Close()
-            } catch {
-                $filesInUse = $true
-                break
-            }
-        }
-    } catch {
-        # If we can't check, assume files might be in use
-        $filesInUse = $true
-    }
-    
-    if ($filesInUse) {
-        Write-Host "  WARNING - Some files in 'iTraffic' folder are in use." -ForegroundColor Yellow
-        Write-Host "  Please close any scripts that might be running from that folder." -ForegroundColor Yellow
-        Write-Host "  The folder will be removed on the next update when files are not in use." -ForegroundColor Yellow
-    } else {
-        try {
-            Remove-Item -Path $oldItrafficPath -Recurse -Force -ErrorAction Stop
-            Write-Host "  OK - Old 'iTraffic' folder removed" -ForegroundColor Green
-        } catch {
-            Write-Host "  WARNING - Could not remove old 'iTraffic' folder: $($_.Exception.Message)" -ForegroundColor Yellow
-            Write-Host "  The folder will be removed on the next update." -ForegroundColor Yellow
-        }
     }
 }
 
