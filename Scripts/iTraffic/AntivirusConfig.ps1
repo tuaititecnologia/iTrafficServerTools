@@ -144,3 +144,6 @@ Write-Host "  ✓ Procesos críticos de SQL Server e IIS excluidos" -ForegroundC
 Write-Host "  ✓ Directorios de configuración y binarios excluidos" -ForegroundColor Green
 Write-Host ""
 Write-Host "Referencia: Microsoft Learn - Antivirus and SQL Server" -ForegroundColor Gray
+
+Read-Host "`nPresiona Enter para salir"
+
