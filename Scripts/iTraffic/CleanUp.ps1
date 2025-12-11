@@ -1,4 +1,65 @@
- # Eliminar logs de todas las aplicaciones en wwwroot
+ # ============================================================================
+# Auto-configuración como Tarea Programada
+# ============================================================================
+$taskName = "iTraffic-CleanUp"
+$scriptPath = $MyInvocation.MyCommand.Path
+$scriptDirectory = Split-Path -Parent $scriptPath
+
+# Verificar si la tarea programada ya existe
+$existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+
+if (-not $existingTask) {
+    Write-Host "Configurando tarea programada '$taskName'..." -ForegroundColor Cyan
+    
+    try {
+        # Crear la acción para ejecutar el script
+        $action = New-ScheduledTaskAction -Execute "PowerShell.exe" `
+            -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
+        
+        # Configurar el trigger para ejecutarse diariamente a las 2:00 AM
+        $trigger = New-ScheduledTaskTrigger -Daily -At 2:00AM
+        
+        # Configurar la configuración de la tarea
+        $settings = New-ScheduledTaskSettingsSet `
+            -AllowStartIfOnBatteries `
+            -DontStopIfGoingOnBatteries `
+            -StartWhenAvailable `
+            -RunOnlyIfNetworkAvailable:$false
+        
+        # Crear el principal (usuario que ejecuta la tarea)
+        # Usar el usuario actual con tipo de inicio de sesión S4U (no requiere contraseña)
+        $principal = New-ScheduledTaskPrincipal `
+            -UserId "$env:USERDOMAIN\$env:USERNAME" `
+            -LogonType S4U `
+            -RunLevel Highest
+        
+        # Registrar la tarea programada
+        Register-ScheduledTask `
+            -TaskName $taskName `
+            -Action $action `
+            -Trigger $trigger `
+            -Settings $settings `
+            -Principal $principal `
+            -Description "Limpieza automática de logs y archivos temporales de iTraffic. Ejecuta el script CleanUp.ps1 diariamente a las 2:00 AM." `
+            -Force
+        
+        Write-Host "  Tarea programada '$taskName' creada exitosamente." -ForegroundColor Green
+        Write-Host "  Se ejecutará diariamente a las 2:00 AM." -ForegroundColor Green
+    } catch {
+        Write-Host "  Error al crear la tarea programada: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "  El script continuará ejecutándose normalmente." -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "La tarea programada '$taskName' ya está configurada." -ForegroundColor Gray
+}
+
+Write-Host ""
+
+# ============================================================================
+# Limpieza de Logs y Archivos Temporales
+# ============================================================================
+
+# Eliminar logs de todas las aplicaciones en wwwroot
 $wwwrootPath = "C:\inetpub\wwwroot"
 $logFolders = Get-ChildItem -Path $wwwrootPath -Recurse -Directory -Filter "Log" | Where-Object { $_.FullName -like "*\App_Data\Log" }
 
@@ -129,5 +190,8 @@ if ($disk) {
     Write-Host "No se pudo obtener información del disco C:" -ForegroundColor Red
 }
 
-pause
+# Solo pausar si se ejecuta de forma interactiva (no como tarea programada)
+if ([Environment]::UserInteractive -and $Host.Name -eq "ConsoleHost") {
+    pause
+}
  
