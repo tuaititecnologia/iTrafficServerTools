@@ -85,7 +85,10 @@ function Invoke-SqlcmdQuery {
         # Usar .NET para compatibilidad con PowerShell 4.0 (Windows Server 2012 R2)
         # WriteAllText es compatible y no requiere -NoNewline
         [System.IO.File]::WriteAllText($tempFile, $Query, [System.Text.Encoding]::UTF8)
-        $output = & sqlcmd -S $ServerInstance -i $tempFile -W -h -1 -s "`t" -w 1000 -b 2>&1
+        # Usar variable string para el separador tab, compatible con PowerShell 4.0
+        # sqlcmd requiere un string, convertir char a string explícitamente
+        $tabSeparator = [string][char]9
+        $output = & sqlcmd -S $ServerInstance -i $tempFile -W -h -1 -s $tabSeparator -w 1000 -b 2>&1
 
         if ($LASTEXITCODE -ne 0) {
             throw "Error executing sqlcmd: $output"
