@@ -82,7 +82,9 @@ function Invoke-SqlcmdQuery {
     $tempFile = [System.IO.Path]::GetTempFileName() + ".sql"
 
     try {
-        $Query | Out-File -FilePath $tempFile -Encoding UTF8 -NoNewline
+        # Usar .NET para compatibilidad con PowerShell 4.0 (Windows Server 2012 R2)
+        # WriteAllText es compatible y no requiere -NoNewline
+        [System.IO.File]::WriteAllText($tempFile, $Query, [System.Text.Encoding]::UTF8)
         $output = & sqlcmd -S $ServerInstance -i $tempFile -W -h -1 -s "`t" -w 1000 -b 2>&1
 
         if ($LASTEXITCODE -ne 0) {
