@@ -37,7 +37,7 @@ ORDER BY name;
         if (-not $line) { continue }
         $trimmed = $line.Trim()
         if ($trimmed -eq "" -or $trimmed -match "^\(.* rows affected\)$") { continue }
-        $parts = $line -split "`t"
+        $parts = $line -split "\|"
         if ($parts.Count -ge 2) {
             $dbName = $parts[0].Trim()
             $recoveryModel = $parts[1].Trim()

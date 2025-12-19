@@ -49,9 +49,9 @@ ORDER BY DB_NAME(database_id), type_desc
             $_.Trim() -ne "" -and
             $_ -notmatch "^-+$" -and 
             $_ -notmatch "^DatabaseName" -and
-            $_ -match "`t"
+            $_ -match "\|"
         } | ForEach-Object {
-            $parts = $_ -split "`t"
+            $parts = $_ -split "\|"
             if ($parts.Count -ge 5) {
                 try {
                     $dbName = $parts[0].Trim()

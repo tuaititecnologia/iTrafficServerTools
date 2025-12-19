@@ -82,13 +82,14 @@ function Invoke-SqlcmdQuery {
     $tempFile = [System.IO.Path]::GetTempFileName() + ".sql"
 
     try {
-        # Usar .NET para compatibilidad con PowerShell 4.0 (Windows Server 2012 R2)
-        # WriteAllText es compatible y no requiere -NoNewline
-        [System.IO.File]::WriteAllText($tempFile, $Query, [System.Text.Encoding]::UTF8)
-        # Usar variable string para el separador tab, compatible con PowerShell 4.0
-        # sqlcmd requiere un string, convertir char a string explícitamente
-        $tabSeparator = [string][char]9
-        $output = & sqlcmd -S $ServerInstance -i $tempFile -W -h -1 -s $tabSeparator -w 1000 -b 2>&1
+        # PowerShell 4.0 (Windows Server 2012 R2) no soporta -NoNewline en Out-File.
+        # Un salto de línea final no afecta la ejecución del SQL.
+        $Query | Out-File -FilePath $tempFile -Encoding UTF8
+
+        # Evitar problemas pasando TAB (`t) a comandos externos en PS 4.0.
+        # Usar un separador estable y actualizar los scripts que parsean la salida.
+        $separator = "|"
+        $output = & sqlcmd -S $ServerInstance -i $tempFile -W -h -1 -s $separator -w 1000 -b 2>&1
 
         if ($LASTEXITCODE -ne 0) {
             throw "Error executing sqlcmd: $output"
