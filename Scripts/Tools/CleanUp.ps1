@@ -56,6 +56,29 @@ if (-not $existingTask) {
 Write-Host ""
 
 # ============================================================================
+# Helpers
+# ============================================================================
+function Restart-ServiceIfExists {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name
+    )
+
+    $svc = Get-Service -Name $Name -ErrorAction SilentlyContinue
+    if (-not $svc) {
+        Write-Host "Servicio '$Name' no encontrado. Se omite reinicio." -ForegroundColor Gray
+        return
+    }
+
+    try {
+        Restart-Service -Name $Name -ErrorAction Stop
+        Write-Host "Servicio '$Name' reiniciado." -ForegroundColor Green
+    } catch {
+        Write-Host "No se pudo reiniciar el servicio '$Name': $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+}
+
+# ============================================================================
 # Limpieza de Logs y Archivos Temporales
 # ============================================================================
 
@@ -118,8 +141,8 @@ foreach ($iisFolder in $iisLogFolders) {
 }
 
 # Eliminar logs de SpoolfisNet
-Restart-Service SpoolfisNet
-Restart-Service SpoolfisNetV2Service
+Restart-ServiceIfExists -Name "SpoolfisNet"
+Restart-ServiceIfExists -Name "SpoolfisNetV2Service"
 $programFilesPaths = @("C:\Program Files", "C:\Program Files (x86)")
 
 foreach ($programPath in $programFilesPaths) {
@@ -144,6 +167,40 @@ foreach ($programPath in $programFilesPaths) {
                 }
             } else {
                 Write-Host "  No se encontraron archivos para eliminar" -ForegroundColor Gray
+            }
+        }
+    }
+}
+
+# Eliminar logs de ServicePriceSurferMigrationReservation (carpeta "logs" dentro del servicio)
+foreach ($programPath in $programFilesPaths) {
+    if (Test-Path $programPath) {
+        $serviceFolders = Get-ChildItem -Path $programPath -Recurse -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -eq "ServicePriceSurferMigrationReservation" }
+
+        foreach ($serviceFolder in $serviceFolders) {
+            $logsPath = Join-Path $serviceFolder.FullName "logs"
+            if (Test-Path $logsPath) {
+                Write-Host "Limpiando logs de ServicePriceSurferMigrationReservation en: $logsPath" -ForegroundColor Yellow
+                $filesToDelete = Get-ChildItem -Path $logsPath -Recurse -File -ErrorAction SilentlyContinue |
+                    Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-3) }
+
+                if ($filesToDelete) {
+                    $deletedCount = 0
+                    foreach ($file in $filesToDelete) {
+                        try {
+                            Remove-Item -Path $file.FullName -Force -ErrorAction Stop
+                            $deletedCount++
+                        } catch {
+                            Write-Host "  No se pudo eliminar $($file.Name): $($_.Exception.Message)" -ForegroundColor Yellow
+                        }
+                    }
+                    if ($deletedCount -gt 0) {
+                        Write-Host "  Eliminados $deletedCount archivo(s)" -ForegroundColor Green
+                    }
+                } else {
+                    Write-Host "  No se encontraron archivos para eliminar" -ForegroundColor Gray
+                }
             }
         }
     }
