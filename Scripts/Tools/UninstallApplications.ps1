@@ -32,44 +32,143 @@ function Uninstall-PRTG {
     
     # Buscar PRTG en el registro
     $registryPaths = @(
-        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
-        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
     )
     
-    $productCode = $null
+    $appInfo = $null
     
     foreach ($path in $registryPaths) {
         if (Test-Path $path) {
-            $app = Get-ItemProperty $path -ErrorAction SilentlyContinue | Where-Object {
-                $_.DisplayName -and ($_.DisplayName -like "*PRTG*" -or $_.DisplayName -like "*Paessler*")
+            $apps = Get-ChildItem -Path $path -ErrorAction SilentlyContinue | ForEach-Object {
+                try {
+                    Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue
+                } catch {
+                    $null
+                }
+            }
+            
+            $appInfo = $apps | Where-Object {
+                $_.DisplayName -and (
+                    $_.DisplayName -like "*PRTG*" -or 
+                    $_.DisplayName -like "*Paessler*" -or
+                    $_.Publisher -like "*Paessler*"
+                )
             } | Select-Object -First 1
             
-            if ($app) {
-                $productCode = $app.PSChildName
-                Write-Host "  Encontrado: $($app.DisplayName)" -ForegroundColor Green
-                if ($app.DisplayVersion) {
-                    Write-Host "  Versión: $($app.DisplayVersion)" -ForegroundColor Gray
+            if ($appInfo) {
+                Write-Host "  Encontrado: $($appInfo.DisplayName)" -ForegroundColor Green
+                if ($appInfo.DisplayVersion) {
+                    Write-Host "  Versión: $($appInfo.DisplayVersion)" -ForegroundColor Gray
+                }
+                if ($appInfo.Publisher) {
+                    Write-Host "  Publicador: $($appInfo.Publisher)" -ForegroundColor Gray
                 }
                 break
             }
         }
     }
     
-    if (-not $productCode) {
+    if (-not $appInfo) {
         Write-Host "  PRTG Network Monitor no está instalado en el sistema." -ForegroundColor Red
         return $false
     }
     
-    # Desinstalar usando msiexec con ProductCode (GUID) - método silencioso estándar
-    Write-Host "  Desinstalando silenciosamente..." -ForegroundColor Gray
-    try {
-        Start-Process -Wait -FilePath "msiexec.exe" -ArgumentList "/x", "$productCode", "/quiet", "/norestart" -NoNewWindow
-        Write-Host "  PRTG Network Monitor desinstalado exitosamente." -ForegroundColor Green
-        return $true
-    } catch {
-        Write-Host "  Error al desinstalar: $($_.Exception.Message)" -ForegroundColor Red
-        return $false
+    # Intentar desinstalar usando diferentes métodos
+    $uninstallSuccess = $false
+    
+    # Método 1: Usar QuietUninstallString si está disponible
+    if ($appInfo.QuietUninstallString) {
+        Write-Host "  Usando QuietUninstallString..." -ForegroundColor Gray
+        try {
+            $uninstallCmd = $appInfo.QuietUninstallString
+            # Si contiene msiexec, asegurar que tenga /quiet
+            if ($uninstallCmd -like "*msiexec*" -and $uninstallCmd -notlike "*/quiet*") {
+                $uninstallCmd = $uninstallCmd -replace '"/I', '"/x' -replace '"/X', '"/x'
+                if ($uninstallCmd -notlike "*/quiet*") {
+                    $uninstallCmd = $uninstallCmd + ' /quiet /norestart'
+                }
+            }
+            
+            $process = Start-Process -FilePath "cmd.exe" -ArgumentList "/c", $uninstallCmd -Wait -PassThru -NoNewWindow
+            if ($process.ExitCode -eq 0) {
+                Write-Host "  PRTG Network Monitor desinstalado exitosamente." -ForegroundColor Green
+                $uninstallSuccess = $true
+            } else {
+                Write-Host "  Código de salida: $($process.ExitCode)" -ForegroundColor Yellow
+            }
+        } catch {
+            Write-Host "  Error con QuietUninstallString: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
     }
+    
+    # Método 2: Usar UninstallString si QuietUninstallString no funcionó
+    if (-not $uninstallSuccess -and $appInfo.UninstallString) {
+        Write-Host "  Intentando con UninstallString..." -ForegroundColor Gray
+        try {
+            $uninstallCmd = $appInfo.UninstallString
+            # Si es msiexec, extraer el GUID y usar /quiet
+            if ($uninstallCmd -like "*msiexec*") {
+                # Extraer GUID del comando
+                if ($uninstallCmd -match '(\{[A-F0-9\-]{36}\})') {
+                    $guid = $matches[1]
+                    $process = Start-Process -Wait -FilePath "msiexec.exe" -ArgumentList "/x", $guid, "/quiet", "/norestart" -PassThru -NoNewWindow
+                    if ($process.ExitCode -eq 0) {
+                        Write-Host "  PRTG Network Monitor desinstalado exitosamente." -ForegroundColor Green
+                        $uninstallSuccess = $true
+                    } else {
+                        Write-Host "  Código de salida: $($process.ExitCode)" -ForegroundColor Yellow
+                    }
+                } else {
+                    # Intentar ejecutar el comando original con modificaciones
+                    $uninstallCmd = $uninstallCmd -replace '"/I', '"/x' -replace '"/X', '"/x'
+                    if ($uninstallCmd -notlike "*/quiet*") {
+                        $uninstallCmd = $uninstallCmd + ' /quiet /norestart'
+                    }
+                    $process = Start-Process -FilePath "cmd.exe" -ArgumentList "/c", $uninstallCmd -Wait -PassThru -NoNewWindow
+                    if ($process.ExitCode -eq 0) {
+                        Write-Host "  PRTG Network Monitor desinstalado exitosamente." -ForegroundColor Green
+                        $uninstallSuccess = $true
+                    }
+                }
+            } else {
+                # Para instaladores no-MSI, intentar ejecutar directamente
+                $process = Start-Process -FilePath "cmd.exe" -ArgumentList "/c", $uninstallCmd -Wait -PassThru -NoNewWindow
+                if ($process.ExitCode -eq 0) {
+                    Write-Host "  PRTG Network Monitor desinstalado exitosamente." -ForegroundColor Green
+                    $uninstallSuccess = $true
+                }
+            }
+        } catch {
+            Write-Host "  Error con UninstallString: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    }
+    
+    # Método 3: Usar ProductCode (PSChildName) como último recurso
+    if (-not $uninstallSuccess) {
+        $productCode = $appInfo.PSChildName
+        # Verificar si es un GUID válido
+        if ($productCode -match '^\{[A-F0-9\-]{36}\}$' -or $productCode -match '^[A-F0-9\-]{36}$') {
+            Write-Host "  Intentando con ProductCode (GUID)..." -ForegroundColor Gray
+            try {
+                $process = Start-Process -Wait -FilePath "msiexec.exe" -ArgumentList "/x", "$productCode", "/quiet", "/norestart" -PassThru -NoNewWindow
+                if ($process.ExitCode -eq 0) {
+                    Write-Host "  PRTG Network Monitor desinstalado exitosamente." -ForegroundColor Green
+                    $uninstallSuccess = $true
+                } else {
+                    Write-Host "  Código de salida: $($process.ExitCode)" -ForegroundColor Yellow
+                    Write-Host "  Intente desinstalar manualmente desde el Panel de Control." -ForegroundColor Yellow
+                }
+            } catch {
+                Write-Host "  Error al desinstalar con ProductCode: $($_.Exception.Message)" -ForegroundColor Red
+            }
+        } else {
+            Write-Host "  No se pudo determinar el método de desinstalación." -ForegroundColor Red
+            Write-Host "  Intente desinstalar manualmente desde el Panel de Control." -ForegroundColor Yellow
+        }
+    }
+    
+    return $uninstallSuccess
 }
 
 # ============================================================================
