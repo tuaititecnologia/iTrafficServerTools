@@ -80,9 +80,6 @@ function Show-Menu {
     Write-Host ""
 }
 
-# Mostrar menú inicial
-Show-Menu
-
 # Solicitar confirmación
 $confirmation = ""
 
@@ -91,6 +88,7 @@ if ($existingTask) {
     $validOptions = @("N", "NO", "M", "MODIFICAR", "MODIFY", "E", "ELIMINAR", "DELETE", "DEL")
     
     do {
+        Show-Menu
         $input = Read-Host "Seleccione una opción (N/M/E)"
         if ($null -eq $input) {
             $input = ""
@@ -152,6 +150,7 @@ if ($existingTask) {
     $validOptions = @("S", "SI", "Y", "YES", "CREAR", "CREATE", "M", "MODIFICAR", "MODIFY", "N", "NO")
     
     do {
+        Show-Menu
         $input = Read-Host "Seleccione una opción (S/M/N)"
         if ($null -eq $input) {
             $input = ""
@@ -187,11 +186,8 @@ if ($existingTask) {
                     
                     $scheduledDateTime = $parsedDate
                     Write-Host ""
-                    Write-Host "Fecha y hora establecida: $($scheduledDateTime.ToString($dateTimeFormat))" -ForegroundColor Green
+                    Write-Host "Fecha y hora actualizada correctamente." -ForegroundColor Green
                     Write-Host ""
-                    
-                    # Volver al menú para que el usuario elija crear, modificar otra vez o salir
-                    Show-Menu
                 } catch {
                     Write-Host "  Error: No se pudo interpretar la fecha y hora ingresada." -ForegroundColor Red
                     Write-Host "  Por favor, use el formato: $dateTimeFormat" -ForegroundColor Yellow
@@ -286,6 +282,13 @@ if ($existingTask -and $confirmation -eq "M_CONFIRM") {
         
         Write-Host "  Tarea programada '$taskName' actualizada exitosamente." -ForegroundColor Green
         Write-Host "  El servidor se reiniciará el $($scheduledDateTime.ToString($dateTimeFormat))" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "=== Proceso Finalizado ===" -ForegroundColor Cyan
+        Write-Host ""
+        if ([Environment]::UserInteractive -and $Host.Name -eq "ConsoleHost") {
+            pause
+        }
+        exit 0
     } catch {
         Write-Host "  Error al actualizar la tarea programada: $($_.Exception.Message)" -ForegroundColor Red
         Write-Host "  Intentando método alternativo..." -ForegroundColor Yellow
@@ -330,8 +333,21 @@ if ($existingTask -and $confirmation -eq "M_CONFIRM") {
             
             Write-Host "  Tarea programada '$taskName' recreada exitosamente." -ForegroundColor Green
             Write-Host "  El servidor se reiniciará el $($scheduledDateTime.ToString($dateTimeFormat))" -ForegroundColor Green
+            Write-Host ""
+            Write-Host "=== Proceso Finalizado ===" -ForegroundColor Cyan
+            Write-Host ""
+            if ([Environment]::UserInteractive -and $Host.Name -eq "ConsoleHost") {
+                pause
+            }
+            exit 0
         } catch {
             Write-Host "  Error al recrear la tarea programada: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host ""
+            Write-Host "=== Proceso Finalizado ===" -ForegroundColor Cyan
+            Write-Host ""
+            if ([Environment]::UserInteractive -and $Host.Name -eq "ConsoleHost") {
+                pause
+            }
             exit 1
         }
     }
@@ -377,18 +393,22 @@ if ($existingTask -and $confirmation -eq "M_CONFIRM") {
         
         Write-Host "  Tarea programada '$taskName' creada exitosamente." -ForegroundColor Green
         Write-Host "  El servidor se reiniciará el $($scheduledDateTime.ToString($dateTimeFormat))" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "=== Proceso Finalizado ===" -ForegroundColor Cyan
+        Write-Host ""
+        if ([Environment]::UserInteractive -and $Host.Name -eq "ConsoleHost") {
+            pause
+        }
+        exit 0
     } catch {
         Write-Host "  Error al crear la tarea programada: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "=== Proceso Finalizado ===" -ForegroundColor Cyan
+        Write-Host ""
+        if ([Environment]::UserInteractive -and $Host.Name -eq "ConsoleHost") {
+            pause
+        }
         exit 1
     }
-}
-
-Write-Host ""
-Write-Host "=== Proceso Finalizado ===" -ForegroundColor Cyan
-Write-Host ""
-
-# Solo pausar si se ejecuta de forma interactiva
-if ([Environment]::UserInteractive -and $Host.Name -eq "ConsoleHost") {
-    pause
 }
 
