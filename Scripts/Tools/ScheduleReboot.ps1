@@ -46,8 +46,7 @@ $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyConti
 if ($existingTask) {
     Write-Host "La tarea programada '$taskName' ya existe." -ForegroundColor Yellow
     try {
-        $currentTask = Get-ScheduledTask -TaskName $taskName
-        $currentTrigger = $currentTask.Triggers[0]
+        $currentTrigger = $existingTask.Triggers[0]
         if ($currentTrigger.StartBoundary) {
             $currentDateTime = [DateTime]::Parse($currentTrigger.StartBoundary)
             Write-Host "Fecha y hora actual programada: $($currentDateTime.ToString($dateTimeFormat))" -ForegroundColor Cyan
@@ -63,13 +62,11 @@ if ($existingTask) {
 # Función para mostrar el menú según si la tarea existe o no
 function Show-Menu {
     if ($existingTask) {
-        # Menú cuando la tarea existe
         Write-Host "Opciones:" -ForegroundColor White
         Write-Host "  [N] Salir - Salir sin realizar cambios" -ForegroundColor Gray
         Write-Host "  [M] Modificar - Cambiar la fecha y hora de ejecución" -ForegroundColor Yellow
         Write-Host "  [E] Eliminar - Eliminar la tarea programada" -ForegroundColor Red
     } else {
-        # Menú cuando la tarea NO existe
         Write-Host "Fecha y hora propuesta: $($scheduledDateTime.ToString($dateTimeFormat))" -ForegroundColor Yellow
         Write-Host ""
         Write-Host "Opciones:" -ForegroundColor White
@@ -80,335 +77,198 @@ function Show-Menu {
     Write-Host ""
 }
 
+# Función para solicitar y validar fecha/hora
+function Get-DateTimeInput {
+    Write-Host ""
+    Write-Host "Ingrese la fecha y hora deseada para el reinicio:" -ForegroundColor Cyan
+    Write-Host "Formato esperado: $dateTimeFormat" -ForegroundColor Gray
+    Write-Host "Ejemplo: $dateTimeExample" -ForegroundColor Gray
+    Write-Host ""
+    
+    $dateInput = (Read-Host "Fecha y hora").Trim()
+    
+    if ([string]::IsNullOrWhiteSpace($dateInput)) {
+        Write-Host "  Error: Debe ingresar una fecha y hora." -ForegroundColor Red
+        Write-Host ""
+        return $null
+    }
+    
+    try {
+        $parsedDate = [DateTime]::Parse($dateInput, $culture)
+        
+        if ($parsedDate -le $now) {
+            Write-Host "  Error: La fecha y hora deben ser en el futuro." -ForegroundColor Red
+            Write-Host "  Fecha/hora actual: $($now.ToString($dateTimeFormat))" -ForegroundColor Yellow
+            Write-Host ""
+            return $null
+        }
+        
+        return $parsedDate
+    } catch {
+        Write-Host "  Error: No se pudo interpretar la fecha y hora ingresada." -ForegroundColor Red
+        Write-Host "  Por favor, use el formato: $dateTimeFormat" -ForegroundColor Yellow
+        Write-Host "  Ejemplo: $dateTimeExample" -ForegroundColor Yellow
+        Write-Host ""
+        return $null
+    }
+}
+
+# Función para crear tarea programada
+function New-ScheduledRebootTask {
+    param([DateTime]$DateTime)
+    
+    $action = New-ScheduledTaskAction -Execute "shutdown.exe" -Argument "-r -t 0"
+    $trigger = New-ScheduledTaskTrigger -Once -At $DateTime
+    $trigger.EndBoundary = $DateTime.AddDays(1).ToString("yyyy-MM-ddTHH:mm:ss")
+    
+    $settings = New-ScheduledTaskSettingsSet `
+        -AllowStartIfOnBatteries `
+        -DontStopIfGoingOnBatteries `
+        -StartWhenAvailable `
+        -RunOnlyIfNetworkAvailable:$false `
+        -DeleteExpiredTaskAfter (New-TimeSpan -Days 0) `
+        -ExecutionTimeLimit (New-TimeSpan -Minutes 0)
+    
+    $principal = New-ScheduledTaskPrincipal `
+        -UserId "$env:USERDOMAIN\$env:USERNAME" `
+        -LogonType S4U `
+        -RunLevel Highest
+    
+    Register-ScheduledTask `
+        -TaskName $taskName `
+        -Action $action `
+        -Trigger $trigger `
+        -Settings $settings `
+        -Principal $principal `
+        -Description "Reinicio programado del servidor. Ejecuta 'shutdown -r -t 0'." `
+        -Force
+}
+
+# Función para finalizar script
+function Exit-Script {
+    param(
+        [int]$ExitCode = 0,
+        [string]$Message = "=== Proceso Finalizado ==="
+    )
+    
+    if ($Message) {
+        Write-Host ""
+        Write-Host $Message -ForegroundColor Cyan
+        Write-Host ""
+    }
+    
+    if ([Environment]::UserInteractive -and $Host.Name -eq "ConsoleHost") {
+        pause
+    }
+    exit $ExitCode
+}
+
 # Solicitar confirmación
 $confirmation = ""
 
 if ($existingTask) {
-    # Si la tarea existe: N (salir), M (modificar), E (eliminar)
-    $validOptions = @("N", "NO", "M", "MODIFICAR", "MODIFY", "E", "ELIMINAR", "DELETE", "DEL")
-    
     do {
         Show-Menu
-        $input = Read-Host "Seleccione una opción (N/M/E)"
-        if ($null -eq $input) {
-            $input = ""
-        }
-        $confirmation = $input.Trim().ToUpperInvariant()
+        $confirmation = (Read-Host "Seleccione una opción (N/M/E)").Trim().ToUpper()
         
-        if ($confirmation -eq "M" -or $confirmation -eq "MODIFICAR" -or $confirmation -eq "MODIFY") {
-            # Solicitar fecha y hora personalizada
-            Write-Host ""
-            Write-Host "Ingrese la nueva fecha y hora para el reinicio:" -ForegroundColor Cyan
-            Write-Host "Formato esperado: $dateTimeFormat" -ForegroundColor Gray
-            Write-Host "Ejemplo: $dateTimeExample" -ForegroundColor Gray
-            Write-Host ""
-            
-            $dateInput = Read-Host "Fecha y hora"
-            if ($null -eq $dateInput) {
-                $dateInput = ""
-            }
-            $dateInput = $dateInput.Trim()
-            
-            if ($dateInput -ne "") {
-                try {
-                    # Parsear la fecha usando el formato del sistema operativo
-                    $parsedDate = [DateTime]::Parse($dateInput, $culture)
-                    
-                    # Verificar que la fecha sea en el futuro
-                    if ($parsedDate -le $now) {
-                        Write-Host "  Error: La fecha y hora deben ser en el futuro." -ForegroundColor Red
-                        Write-Host "  Fecha/hora actual: $($now.ToString($dateTimeFormat))" -ForegroundColor Yellow
-                        Write-Host ""
-                        continue
-                    }
-                    
-                    $scheduledDateTime = $parsedDate
-                    Write-Host ""
-                    Write-Host "Fecha y hora establecida: $($scheduledDateTime.ToString($dateTimeFormat))" -ForegroundColor Green
-                    Write-Host ""
-                    
-                    # Después de cambiar la fecha, proceder a actualizar
-                    $confirmation = "M_CONFIRM"
-                    break
-                } catch {
-                    Write-Host "  Error: No se pudo interpretar la fecha y hora ingresada." -ForegroundColor Red
-                    Write-Host "  Por favor, use el formato: $dateTimeFormat" -ForegroundColor Yellow
-                    Write-Host "  Ejemplo: $dateTimeExample" -ForegroundColor Yellow
-                    Write-Host ""
-                }
-            } else {
-                Write-Host "  Error: Debe ingresar una fecha y hora." -ForegroundColor Red
+        if ($confirmation -eq "M") {
+            $newDate = Get-DateTimeInput
+            if ($newDate) {
+                $scheduledDateTime = $newDate
+                Write-Host "Fecha y hora establecida: $($scheduledDateTime.ToString($dateTimeFormat))" -ForegroundColor Green
                 Write-Host ""
+                $confirmation = "M_CONFIRM"
+                break
             }
-        } elseif ($confirmation -notin $validOptions) {
+        } elseif ($confirmation -notin @("N", "E")) {
             Write-Host "Opción inválida. Por favor seleccione N, M o E." -ForegroundColor Red
             Write-Host ""
         }
-    } while ($confirmation -notin @("N", "NO", "E", "ELIMINAR", "DELETE", "DEL", "M_CONFIRM"))
+    } while ($confirmation -notin @("N", "E", "M_CONFIRM"))
 } else {
-    # Si la tarea NO existe: S (crear), M (modificar), N (salir)
-    $validOptions = @("S", "SI", "Y", "YES", "CREAR", "CREATE", "M", "MODIFICAR", "MODIFY", "N", "NO")
-    
     do {
         Show-Menu
-        $input = Read-Host "Seleccione una opción (S/M/N)"
-        if ($null -eq $input) {
-            $input = ""
-        }
-        $confirmation = $input.Trim().ToUpperInvariant()
+        $confirmation = (Read-Host "Seleccione una opción (S/M/N)").Trim().ToUpper()
         
-        if ($confirmation -eq "M" -or $confirmation -eq "MODIFICAR" -or $confirmation -eq "MODIFY") {
-            # Solicitar fecha y hora personalizada
-            Write-Host ""
-            Write-Host "Ingrese la fecha y hora deseada para el reinicio:" -ForegroundColor Cyan
-            Write-Host "Formato esperado: $dateTimeFormat" -ForegroundColor Gray
-            Write-Host "Ejemplo: $dateTimeExample" -ForegroundColor Gray
-            Write-Host ""
-            
-            $dateInput = Read-Host "Fecha y hora"
-            if ($null -eq $dateInput) {
-                $dateInput = ""
-            }
-            $dateInput = $dateInput.Trim()
-            
-            if ($dateInput -ne "") {
-                try {
-                    # Parsear la fecha usando el formato del sistema operativo
-                    $parsedDate = [DateTime]::Parse($dateInput, $culture)
-                    
-                    # Verificar que la fecha sea en el futuro
-                    if ($parsedDate -le $now) {
-                        Write-Host "  Error: La fecha y hora deben ser en el futuro." -ForegroundColor Red
-                        Write-Host "  Fecha/hora actual: $($now.ToString($dateTimeFormat))" -ForegroundColor Yellow
-                        Write-Host ""
-                        continue
-                    }
-                    
-                    $scheduledDateTime = $parsedDate
-                    Write-Host ""
-                    Write-Host "Fecha y hora actualizada correctamente." -ForegroundColor Green
-                    Write-Host ""
-                } catch {
-                    Write-Host "  Error: No se pudo interpretar la fecha y hora ingresada." -ForegroundColor Red
-                    Write-Host "  Por favor, use el formato: $dateTimeFormat" -ForegroundColor Yellow
-                    Write-Host "  Ejemplo: $dateTimeExample" -ForegroundColor Yellow
-                    Write-Host ""
-                }
-            } else {
-                Write-Host "  Error: Debe ingresar una fecha y hora." -ForegroundColor Red
+        if ($confirmation -eq "M") {
+            $newDate = Get-DateTimeInput
+            if ($newDate) {
+                $scheduledDateTime = $newDate
+                Write-Host "Fecha y hora actualizada correctamente." -ForegroundColor Green
                 Write-Host ""
             }
-        } elseif ($confirmation -notin $validOptions) {
+        } elseif ($confirmation -notin @("S", "N")) {
             Write-Host "Opción inválida. Por favor seleccione S, M o N." -ForegroundColor Red
             Write-Host ""
         }
-    } while ($confirmation -notin @("S", "SI", "Y", "YES", "CREAR", "CREATE", "N", "NO"))
+    } while ($confirmation -notin @("S", "N"))
 }
 
 # Procesar la respuesta
-if ($confirmation -in @("N", "NO")) {
-    Write-Host ""
-    Write-Host "Operación cancelada. No se realizaron cambios." -ForegroundColor Yellow
-    Write-Host ""
-    if ([Environment]::UserInteractive -and $Host.Name -eq "ConsoleHost") {
-        pause
-    }
-    exit 0
+if ($confirmation -eq "N") {
+    Exit-Script -Message "Operación cancelada. No se realizaron cambios." -ExitCode 0
 }
 
-# Procesar eliminación de tarea (solo si existe)
-if ($existingTask -and $confirmation -in @("E", "ELIMINAR", "DELETE", "DEL")) {
+if ($existingTask -and $confirmation -eq "E") {
     Write-Host ""
     Write-Host "Eliminando tarea programada '$taskName'..." -ForegroundColor Cyan
     
     try {
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
         Write-Host "  Tarea programada '$taskName' eliminada exitosamente." -ForegroundColor Green
-        Write-Host ""
-        Write-Host "=== Proceso Finalizado ===" -ForegroundColor Cyan
-        Write-Host ""
-        if ([Environment]::UserInteractive -and $Host.Name -eq "ConsoleHost") {
-            pause
-        }
-        exit 0
+        Exit-Script
     } catch {
         Write-Host "  Error al eliminar la tarea programada: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host ""
-        if ([Environment]::UserInteractive -and $Host.Name -eq "ConsoleHost") {
-            pause
-        }
-        exit 1
+        Exit-Script -ExitCode 1
     }
 }
 
 # Proceder con la creación o actualización
 Write-Host ""
 
-# Si la tarea existe y se eligió modificar (M_CONFIRM), actualizar
 if ($existingTask -and $confirmation -eq "M_CONFIRM") {
     Write-Host "Actualizando tarea programada '$taskName'..." -ForegroundColor Cyan
     
     try {
-        # Obtener la tarea completa
         $task = Get-ScheduledTask -TaskName $taskName
-        
-        # Crear un nuevo trigger con la nueva fecha/hora
         $newTrigger = New-ScheduledTaskTrigger -Once -At $scheduledDateTime
-        # Establecer EndBoundary para evitar el error XML (un día después de la ejecución)
         $newTrigger.EndBoundary = $scheduledDateTime.AddDays(1).ToString("yyyy-MM-ddTHH:mm:ss")
         
-        # Obtener la acción actual (puede ser un array, tomar el primer elemento)
-        if ($task.Actions -is [System.Array]) {
-            $currentAction = $task.Actions[0]
-        } else {
-            $currentAction = $task.Actions
-        }
-        
-        # Obtener la configuración actual como objeto TaskSettings
-        $currentSettings = $task.Settings
-        
-        # Obtener el principal actual
-        $currentPrincipal = $task.Principal
-        
-        # Actualizar la tarea - usar el objeto Task completo para evitar problemas de conversión
-        # Primero, actualizar solo el trigger (método más seguro)
         $task.Triggers = @($newTrigger)
-        
-        # Actualizar la descripción si es necesario
         $task.Description = "Reinicio programado del servidor. Ejecuta 'shutdown -r -t 0'."
-        
-        # Registrar la tarea actualizada
         Set-ScheduledTask -InputObject $task
         
         Write-Host "  Tarea programada '$taskName' actualizada exitosamente." -ForegroundColor Green
         Write-Host "  El servidor se reiniciará el $($scheduledDateTime.ToString($dateTimeFormat))" -ForegroundColor Green
-        Write-Host ""
-        Write-Host "=== Proceso Finalizado ===" -ForegroundColor Cyan
-        Write-Host ""
-        if ([Environment]::UserInteractive -and $Host.Name -eq "ConsoleHost") {
-            pause
-        }
-        exit 0
+        Exit-Script
     } catch {
         Write-Host "  Error al actualizar la tarea programada: $($_.Exception.Message)" -ForegroundColor Red
         Write-Host "  Intentando método alternativo..." -ForegroundColor Yellow
         
         try {
-            # Método alternativo: eliminar y recrear la tarea
             Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
-            
-            # Crear la acción para ejecutar el comando de reinicio
-            $action = New-ScheduledTaskAction -Execute "shutdown.exe" `
-                -Argument "-r -t 0"
-            
-            # Configurar el trigger para ejecutarse una vez en la fecha y hora especificada
-            $trigger = New-ScheduledTaskTrigger -Once -At $scheduledDateTime
-            # Establecer EndBoundary para evitar el error XML (un día después de la ejecución)
-            $trigger.EndBoundary = $scheduledDateTime.AddDays(1).ToString("yyyy-MM-ddTHH:mm:ss")
-            
-            # Configurar la configuración de la tarea
-            $settings = New-ScheduledTaskSettingsSet `
-                -AllowStartIfOnBatteries `
-                -DontStopIfGoingOnBatteries `
-                -StartWhenAvailable `
-                -RunOnlyIfNetworkAvailable:$false `
-                -DeleteExpiredTaskAfter (New-TimeSpan -Days 0) `
-                -ExecutionTimeLimit (New-TimeSpan -Minutes 0)
-            
-            # Crear el principal (usuario que ejecuta la tarea)
-            $principal = New-ScheduledTaskPrincipal `
-                -UserId "$env:USERDOMAIN\$env:USERNAME" `
-                -LogonType S4U `
-                -RunLevel Highest
-            
-            # Registrar la tarea programada
-            Register-ScheduledTask `
-                -TaskName $taskName `
-                -Action $action `
-                -Trigger $trigger `
-                -Settings $settings `
-                -Principal $principal `
-                -Description "Reinicio programado del servidor. Ejecuta 'shutdown -r -t 0'." `
-                -Force
+            New-ScheduledRebootTask -DateTime $scheduledDateTime
             
             Write-Host "  Tarea programada '$taskName' recreada exitosamente." -ForegroundColor Green
             Write-Host "  El servidor se reiniciará el $($scheduledDateTime.ToString($dateTimeFormat))" -ForegroundColor Green
-            Write-Host ""
-            Write-Host "=== Proceso Finalizado ===" -ForegroundColor Cyan
-            Write-Host ""
-            if ([Environment]::UserInteractive -and $Host.Name -eq "ConsoleHost") {
-                pause
-            }
-            exit 0
+            Exit-Script
         } catch {
             Write-Host "  Error al recrear la tarea programada: $($_.Exception.Message)" -ForegroundColor Red
-            Write-Host ""
-            Write-Host "=== Proceso Finalizado ===" -ForegroundColor Cyan
-            Write-Host ""
-            if ([Environment]::UserInteractive -and $Host.Name -eq "ConsoleHost") {
-                pause
-            }
-            exit 1
+            Exit-Script -ExitCode 1
         }
     }
-} elseif (-not $existingTask -and $confirmation -in @("S", "SI", "Y", "YES", "CREAR", "CREATE")) {
-    # Crear nueva tarea solo si no existe y se seleccionó crear
+} elseif (-not $existingTask -and $confirmation -eq "S") {
     Write-Host "Creando tarea programada '$taskName'..." -ForegroundColor Cyan
     
     try {
-        # Crear la acción para ejecutar el comando de reinicio
-        $action = New-ScheduledTaskAction -Execute "shutdown.exe" `
-            -Argument "-r -t 0"
-        
-        # Configurar el trigger para ejecutarse una vez en la fecha y hora especificada
-        $trigger = New-ScheduledTaskTrigger -Once -At $scheduledDateTime
-        # Establecer EndBoundary para evitar el error XML (un día después de la ejecución)
-        $trigger.EndBoundary = $scheduledDateTime.AddDays(1).ToString("yyyy-MM-ddTHH:mm:ss")
-        
-        # Configurar la configuración de la tarea
-        $settings = New-ScheduledTaskSettingsSet `
-            -AllowStartIfOnBatteries `
-            -DontStopIfGoingOnBatteries `
-            -StartWhenAvailable `
-            -RunOnlyIfNetworkAvailable:$false `
-            -DeleteExpiredTaskAfter (New-TimeSpan -Days 0) `
-            -ExecutionTimeLimit (New-TimeSpan -Minutes 0)
-        
-        # Crear el principal (usuario que ejecuta la tarea)
-        # Usar el usuario actual con tipo de inicio de sesión S4U (no requiere contraseña)
-        $principal = New-ScheduledTaskPrincipal `
-            -UserId "$env:USERDOMAIN\$env:USERNAME" `
-            -LogonType S4U `
-            -RunLevel Highest
-        
-        # Registrar la tarea programada
-        Register-ScheduledTask `
-            -TaskName $taskName `
-            -Action $action `
-            -Trigger $trigger `
-            -Settings $settings `
-            -Principal $principal `
-            -Description "Reinicio programado del servidor. Ejecuta 'shutdown -r -t 0'." `
-            -Force
+        New-ScheduledRebootTask -DateTime $scheduledDateTime
         
         Write-Host "  Tarea programada '$taskName' creada exitosamente." -ForegroundColor Green
         Write-Host "  El servidor se reiniciará el $($scheduledDateTime.ToString($dateTimeFormat))" -ForegroundColor Green
-        Write-Host ""
-        Write-Host "=== Proceso Finalizado ===" -ForegroundColor Cyan
-        Write-Host ""
-        if ([Environment]::UserInteractive -and $Host.Name -eq "ConsoleHost") {
-            pause
-        }
-        exit 0
+        Exit-Script
     } catch {
         Write-Host "  Error al crear la tarea programada: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host ""
-        Write-Host "=== Proceso Finalizado ===" -ForegroundColor Cyan
-        Write-Host ""
-        if ([Environment]::UserInteractive -and $Host.Name -eq "ConsoleHost") {
-            pause
-        }
-        exit 1
+        Exit-Script -ExitCode 1
     }
 }
 
