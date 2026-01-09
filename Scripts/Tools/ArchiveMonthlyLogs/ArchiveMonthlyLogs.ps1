@@ -221,12 +221,21 @@ function Invoke-CompressDatabaseFiles {
         $allFiles += $MdfFiles
         $allFiles += $LdfFiles
         
-        # Verificar que todos los archivos existan
+        # Verificar que todos los archivos existan y mostrar información
+        $totalSize = 0
+        Write-Host "  Archivos a comprimir:" -ForegroundColor Gray
         foreach ($file in $allFiles) {
             if (-not (Test-Path $file)) {
                 throw "Archivo no encontrado: $file"
             }
+            $fileInfo = Get-Item $file
+            $fileSizeMB = [math]::Round($fileInfo.Length / 1MB, 2)
+            $totalSize += $fileInfo.Length
+            Write-Host "    $($fileInfo.Name) - $fileSizeMB MB" -ForegroundColor Gray
         }
+        $totalSizeMB = [math]::Round($totalSize / 1MB, 2)
+        $totalSizeGB = [math]::Round($totalSize / 1GB, 2)
+        Write-Host "  Tamaño total: $totalSizeMB MB ($totalSizeGB GB)" -ForegroundColor Gray
         
         # Eliminar ZIP existente si existe
         if (Test-Path $OutputZipPath) {
@@ -236,20 +245,29 @@ function Invoke-CompressDatabaseFiles {
         # Usar 7-Zip con compresión mínima (Store = 0, Fastest = 1)
         # -mx=1 es compresión rápida (mínima)
         # -tzip crea un archivo ZIP
+        # -spf2 usa nombres de archivo completos (sin rutas relativas)
+        # -mm=Copy para copiar sin comprimir (más rápido, pero no comprime)
+        # O usar -mx=1 para compresión mínima
         $arguments = @(
             "a",                    # Agregar archivos
             "-tzip",                # Tipo: ZIP
             "-mx=1",                # Nivel de compresión: 1 (Fastest/Mínima)
+            "-spf2",                # Usar nombres de archivo completos
             "`"$OutputZipPath`""   # Archivo de salida
         )
         
-        # Agregar cada archivo como argumento separado
+        # Agregar cada archivo con ruta completa entre comillas
         foreach ($file in $allFiles) {
-            $arguments += "`"$file`""
+            $fullPath = (Resolve-Path $file).Path
+            $arguments += "`"$fullPath`""
         }
         
         Write-Host "  Ejecutando 7-Zip..." -ForegroundColor Gray
-        $process = Start-Process -FilePath $SevenZipExecutable -ArgumentList $arguments -Wait -NoNewWindow -PassThru
+        Write-Host "    Comando: $SevenZipExecutable $($arguments -join ' ')" -ForegroundColor DarkGray
+        
+        # Ejecutar 7-Zip desde el directorio del ejecutable para evitar problemas de rutas
+        $sevenZipDir = Split-Path $SevenZipExecutable -Parent
+        $process = Start-Process -FilePath $SevenZipExecutable -ArgumentList $arguments -WorkingDirectory $sevenZipDir -Wait -NoNewWindow -PassThru
         
         if ($process.ExitCode -ne 0) {
             throw "7-Zip falló con código de salida: $($process.ExitCode)"
@@ -265,7 +283,8 @@ function Invoke-CompressDatabaseFiles {
         
         $zipSize = (Get-Item $OutputZipPath).Length
         $zipSizeMB = [math]::Round($zipSize / 1MB, 2)
-        Write-Host "  Tamaño del ZIP: $zipSizeMB MB" -ForegroundColor Gray
+        $zipSizeGB = [math]::Round($zipSize / 1GB, 2)
+        Write-Host "  Tamaño del ZIP: $zipSizeMB MB ($zipSizeGB GB)" -ForegroundColor Gray
         
         return $true
     } catch {
