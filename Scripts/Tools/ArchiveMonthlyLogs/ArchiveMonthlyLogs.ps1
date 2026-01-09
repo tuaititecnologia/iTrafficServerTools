@@ -242,32 +242,13 @@ function Invoke-CompressDatabaseFiles {
             Remove-Item $OutputZipPath -Force -ErrorAction SilentlyContinue
         }
         
-        # Usar 7-Zip con compresión mínima (Store = 0, Fastest = 1)
-        # -mx=1 es compresión rápida (mínima)
-        # -tzip crea un archivo ZIP
-        # -spf2 usa nombres de archivo completos (sin rutas relativas)
-        # -mm=Copy para copiar sin comprimir (más rápido, pero no comprime)
-        # O usar -mx=1 para compresión mínima
-        $arguments = @(
-            "a",                    # Agregar archivos
-            "-tzip",                # Tipo: ZIP
-            "-mx=1",                # Nivel de compresión: 1 (Fastest/Mínima)
-            "-spf2",                # Usar nombres de archivo completos
-            "`"$OutputZipPath`""   # Archivo de salida
-        )
-        
-        # Agregar cada archivo con ruta completa entre comillas
+        $arguments = @("a", "-tzip", "-mx=1", "-spf2", "`"$OutputZipPath`"")
         foreach ($file in $allFiles) {
-            $fullPath = (Resolve-Path $file).Path
-            $arguments += "`"$fullPath`""
+            $arguments += "`"$((Resolve-Path $file).Path)`""
         }
         
         Write-Host "  Ejecutando 7-Zip..." -ForegroundColor Gray
-        Write-Host "    Comando: $SevenZipExecutable $($arguments -join ' ')" -ForegroundColor DarkGray
-        
-        # Ejecutar 7-Zip desde el directorio del ejecutable para evitar problemas de rutas
-        $sevenZipDir = Split-Path $SevenZipExecutable -Parent
-        $process = Start-Process -FilePath $SevenZipExecutable -ArgumentList $arguments -WorkingDirectory $sevenZipDir -Wait -NoNewWindow -PassThru
+        $process = Start-Process -FilePath $SevenZipExecutable -ArgumentList $arguments -WorkingDirectory (Split-Path $SevenZipExecutable -Parent) -Wait -NoNewWindow -PassThru
         
         if ($process.ExitCode -ne 0) {
             throw "7-Zip falló con código de salida: $($process.ExitCode)"
@@ -306,44 +287,17 @@ function Test-ZipIntegrity {
             throw "El archivo ZIP no existe: $ZipPath"
         }
         
-        # Verificar que el archivo tenga contenido
-        $zipFile = Get-Item $ZipPath
-        if ($zipFile.Length -eq 0) {
+        if ((Get-Item $ZipPath).Length -eq 0) {
             throw "El archivo ZIP está vacío"
         }
         
-        # Verificar que 7-Zip existe
-        if (-not (Test-Path $SevenZipExecutable)) {
-            throw "No se encontró el ejecutable de 7-Zip en: $SevenZipExecutable"
-        }
-        
-        # Usar 7-Zip para verificar integridad (test)
-        # 7-Zip test verifica el archivo sin extraerlo
-        $arguments = @(
-            "t",                    # Test (verificar integridad)
-            "`"$ZipPath`""         # Archivo a verificar
-        )
-        
-        $process = Start-Process -FilePath $SevenZipExecutable -ArgumentList $arguments -Wait -NoNewWindow -PassThru -RedirectStandardOutput $null -RedirectStandardError $null
+        $process = Start-Process -FilePath $SevenZipExecutable -ArgumentList @("t", "`"$ZipPath`"") -Wait -NoNewWindow -PassThru -RedirectStandardOutput $null -RedirectStandardError $null
         
         if ($process.ExitCode -ne 0) {
-            throw "El archivo ZIP está corrupto o no es válido (código de salida: $($process.ExitCode))"
+            throw "El archivo ZIP está corrupto (código: $($process.ExitCode))"
         }
         
-        # También verificar que contiene archivos listando el contenido
-        $arguments = @(
-            "l",                    # List (listar contenido)
-            "`"$ZipPath`""         # Archivo a listar
-        )
-        
-        $listOutput = & $SevenZipExecutable $arguments 2>&1
-        $fileCount = ($listOutput | Select-String -Pattern "^\s+\d+\s+\d+\s+\d+\s+\d{4}-\d{2}-\d{2}" | Measure-Object).Count
-        
-        if ($fileCount -eq 0) {
-            throw "El ZIP está vacío o no se pudo leer su contenido"
-        }
-        
-        Write-Host "  Integridad del ZIP verificada. Archivos encontrados: $fileCount" -ForegroundColor Green
+        Write-Host "  Integridad del ZIP verificada." -ForegroundColor Green
         
         return $true
     } catch {
@@ -366,30 +320,12 @@ function Copy-ToNAS {
         throw "No se encontró el archivo de credenciales: $CredentialsXmlPath. Ejecute ConfigureArchiveCredentials.ps1 primero."
     }
     
-    # Cargar credenciales
-    try {
-        $config = Import-Clixml -Path $CredentialsXmlPath
-        $credential = $config.Credential
-        $configNasPath = $config.NasPath
-        
-        # Usar la ruta del NAS de la configuración si está disponible
-        if ($configNasPath) {
-            $NasPath = $configNasPath
-        }
-    } catch {
-        throw "Error al cargar credenciales: $($_.Exception.Message)"
-    }
+    $config = Import-Clixml -Path $CredentialsXmlPath
+    $credential = $config.Credential
+    if ($config.NasPath) { $NasPath = $config.NasPath }
     
-    # Mapear el share del NAS
-    $tempDrive = "Z"
-    $drives = Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Name -eq $tempDrive }
-    if ($drives) {
-        $tempDrive = "Y"
-        $drives = Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Name -eq $tempDrive }
-        if ($drives) {
-            $tempDrive = "X"
-        }
-    }
+    $tempDrive = @("Z", "Y", "X") | Where-Object { -not (Get-PSDrive -PSProvider FileSystem -Name $_ -ErrorAction SilentlyContinue) } | Select-Object -First 1
+    if (-not $tempDrive) { throw "No hay unidades disponibles para mapear el NAS" }
     
     $mapped = $false
     try {
@@ -398,32 +334,24 @@ function Copy-ToNAS {
         $null = New-PSDrive -Name $tempDrive -PSProvider FileSystem -Root $NasPath -Credential $credential -ErrorAction Stop
         $mapped = $true
         
-        # Verificar conectividad
         $nasRoot = "$tempDrive`:\"
         if (-not (Test-Path $nasRoot)) {
             throw "No se pudo acceder al share del NAS"
         }
         
-        Write-Host "  Conectado al NAS exitosamente." -ForegroundColor Green
-        
-        # Copiar el archivo
         $zipFileName = Split-Path $ZipPath -Leaf
         $nasDestination = Join-Path $nasRoot $zipFileName
         
-        Write-Host "  Copiando $zipFileName al NAS..." -ForegroundColor Gray
         Copy-Item -Path $ZipPath -Destination $nasDestination -Force -ErrorAction Stop
         
-        # Verificar que la copia fue exitosa comparando tamaños
         $localSize = (Get-Item $ZipPath).Length
         $nasSize = (Get-Item $nasDestination).Length
-        
         if ($localSize -ne $nasSize) {
-            throw "Los tamaños de los archivos no coinciden. Local: $localSize bytes, NAS: $nasSize bytes"
+            throw "Los tamaños no coinciden. Local: $localSize bytes, NAS: $nasSize bytes"
         }
         
         Write-Host "  Archivo copiado exitosamente al NAS." -ForegroundColor Green
-        Write-Host "  Destino: $nasDestination" -ForegroundColor Gray
-        Write-Host "  Tamaño: $([math]::Round($nasSize / 1MB, 2)) MB" -ForegroundColor Gray
+        Write-Host "  Destino: $nasDestination ($([math]::Round($nasSize / 1MB, 2)) MB)" -ForegroundColor Gray
         
         return $true
     } catch {
@@ -446,35 +374,19 @@ function Invoke-CreateNewLogDatabase {
     Write-Host "  Creando nueva base de datos..." -ForegroundColor Yellow
     
     try {
-        # Generar nombres de archivos
         $mdfPath = Join-Path $SqlDataPath "$DatabaseName.mdf"
         $ldfPath = Join-Path $SqlDataPath "$DatabaseName`_log.ldf"
         
-        # Verificar que no existan los archivos
-        if (Test-Path $mdfPath) {
-            throw "El archivo MDF ya existe: $mdfPath"
-        }
-        if (Test-Path $ldfPath) {
-            throw "El archivo LDF ya existe: $ldfPath"
+        if (Test-Path $mdfPath -or Test-Path $ldfPath) {
+            throw "Los archivos ya existen: $mdfPath o $ldfPath"
         }
         
-        # Crear la base de datos
         $escapedName = $DatabaseName.Replace("'", "''")
-        $escapedMdfPath = $mdfPath.Replace("'", "''")
-        $escapedLdfPath = $ldfPath.Replace("'", "''")
-        
-        $query = @"
-CREATE DATABASE [$escapedName]
-ON (NAME = '$escapedName', FILENAME = '$escapedMdfPath')
-LOG ON (NAME = '${escapedName}_log', FILENAME = '$escapedLdfPath');
-"@
+        $query = "CREATE DATABASE [$escapedName] ON (NAME = '$escapedName', FILENAME = '$($mdfPath.Replace("'", "''"))') LOG ON (NAME = '${escapedName}_log', FILENAME = '$($ldfPath.Replace("'", "''"))');"
         
         Invoke-SqlcmdQuery -ServerInstance $ServerInstance -Query $query | Out-Null
         
-        Write-Host "  Base de datos creada exitosamente." -ForegroundColor Green
-        Write-Host "  Nombre: $DatabaseName" -ForegroundColor Gray
-        Write-Host "  MDF: $mdfPath" -ForegroundColor Gray
-        Write-Host "  LDF: $ldfPath" -ForegroundColor Gray
+        Write-Host "  Base de datos creada exitosamente: $DatabaseName" -ForegroundColor Green
         
         return $true
     } catch {
@@ -630,7 +542,6 @@ Write-Host ""
 Write-Host "=== Iniciando Proceso de Archivo ===" -ForegroundColor Cyan
 Write-Host ""
 
-$errorOccurred = $false
 $detached = $false
 
 try {
@@ -660,90 +571,55 @@ try {
     
     # 5. Eliminar archivos locales
     Write-Host "[5/6] Eliminando archivos locales..." -ForegroundColor Yellow
-    $filesDeleted = 0
-    foreach ($mdf in $physicalFiles.MDF) {
-        if (Test-Path $mdf) {
-            Remove-Item $mdf -Force -ErrorAction Stop
-            Write-Host "  Eliminado: $mdf" -ForegroundColor Gray
-            $filesDeleted++
+    foreach ($file in ($physicalFiles.MDF + $physicalFiles.LDF)) {
+        if (Test-Path $file) {
+            Remove-Item $file -Force -ErrorAction Stop
         }
     }
-    foreach ($ldf in $physicalFiles.LDF) {
-        if (Test-Path $ldf) {
-            Remove-Item $ldf -Force -ErrorAction Stop
-            Write-Host "  Eliminado: $ldf" -ForegroundColor Gray
-            $filesDeleted++
-        }
-    }
-    Write-Host "  Archivos eliminados: $filesDeleted" -ForegroundColor Green
+    Write-Host "  Archivos eliminados." -ForegroundColor Green
     
-    # Eliminar ZIP temporal
-    if (Test-Path $zipPath) {
-        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
-    }
+    Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
     Write-Host ""
     
     # 6. Crear nueva base de datos para el mes siguiente
     Write-Host "[6/6] Creando nueva base de datos..." -ForegroundColor Yellow
-    $nextMonth = $now.AddMonths(1)
-    $newDatabaseName = "$DatabaseNamePattern$($nextMonth.ToString('yyyyMM'))"
+    $newDatabaseName = "$DatabaseNamePattern$($now.AddMonths(1).ToString('yyyyMM'))"
     
-    # Verificar que no exista ya
     $existingDbs = Get-LogDatabases -ServerInstance $SqlServerInstance -Pattern $DatabaseNamePattern
     if ($existingDbs | Where-Object { $_.Name -eq $newDatabaseName }) {
-        Write-Host "  La base de datos $newDatabaseName ya existe. Omitiendo creación." -ForegroundColor Yellow
+        Write-Host "  La base de datos $newDatabaseName ya existe." -ForegroundColor Yellow
     } else {
         Invoke-CreateNewLogDatabase -ServerInstance $SqlServerInstance -DatabaseName $newDatabaseName -SqlDataPath $SqlDataPath
     }
     Write-Host ""
     
-    # Resumen
     Write-Host "=== Proceso Completado Exitosamente ===" -ForegroundColor Green
     Write-Host ""
     Write-Host "Resumen:" -ForegroundColor Cyan
     Write-Host "  Base de datos archivada: $($oldestDatabase.Name)" -ForegroundColor White
     Write-Host "  Espacio liberado: $totalSizeMB MB" -ForegroundColor White
     Write-Host "  Archivo en NAS: $NasArchivePath\$zipFileName" -ForegroundColor White
-    if ($existingDbs | Where-Object { $_.Name -eq $newDatabaseName }) {
-        Write-Host "  Nueva base de datos: Ya existía $newDatabaseName" -ForegroundColor White
-    } else {
-        Write-Host "  Nueva base de datos: $newDatabaseName" -ForegroundColor White
-    }
+    Write-Host "  Nueva base de datos: $newDatabaseName" -ForegroundColor White
     Write-Host ""
     
     exit 0
     
 } catch {
-    $errorOccurred = $true
     Write-Host ""
     Write-Host "=== Error Durante el Proceso ===" -ForegroundColor Red
     Write-Host "  Error: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host ""
     
     # Rollback: Re-attach de la base de datos si fue desacoplada
-    if ($detached) {
+    if ($detached -and (Test-Path $physicalFiles.MDF[0])) {
         Write-Host "Intentando restaurar la base de datos..." -ForegroundColor Yellow
         try {
-            $mdfFile = $physicalFiles.MDF[0]
-            if (Test-Path $mdfFile) {
-                $escapedName = $oldestDatabase.Name.Replace("'", "''")
-                $escapedMdf = $mdfFile.Replace("'", "''")
-                $ldfFile = $physicalFiles.LDF[0]
-                $escapedLdf = $ldfFile.Replace("'", "''")
-                
-                $attachQuery = @"
-CREATE DATABASE [$escapedName] ON
-(FILENAME = '$escapedMdf'),
-(FILENAME = '$escapedLdf')
-FOR ATTACH;
-"@
-                Invoke-SqlcmdQuery -ServerInstance $SqlServerInstance -Query $attachQuery | Out-Null
-                Write-Host "  Base de datos restaurada exitosamente." -ForegroundColor Green
-            } else {
-                Write-Host "  No se pudo restaurar: archivos no encontrados." -ForegroundColor Yellow
-            }
+            $escapedName = $oldestDatabase.Name.Replace("'", "''")
+            $attachQuery = "CREATE DATABASE [$escapedName] ON (FILENAME = '$($physicalFiles.MDF[0].Replace("'", "''"))'), (FILENAME = '$($physicalFiles.LDF[0].Replace("'", "''"))') FOR ATTACH;"
+            Invoke-SqlcmdQuery -ServerInstance $SqlServerInstance -Query $attachQuery | Out-Null
+            Write-Host "  Base de datos restaurada exitosamente." -ForegroundColor Green
         } catch {
-            Write-Host "  Error al restaurar la base de datos: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "  Error al restaurar: $($_.Exception.Message)" -ForegroundColor Red
         }
     }
     
