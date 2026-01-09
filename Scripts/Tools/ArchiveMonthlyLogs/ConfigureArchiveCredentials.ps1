@@ -23,18 +23,28 @@ if (-not $isAdmin) {
 # ============================================================================
 # Configuración
 # ============================================================================
-$credentialsXmlPath = Join-Path $PSScriptRoot "ArchiveCredentials.xml"
+# Archivo de credenciales en ubicación persistente (fuera de la carpeta del script)
+# Esto evita que se borre cuando se actualiza el script
+$credentialsFolder = Join-Path $env:ProgramData "iTrafficServerTools"
+if (-not (Test-Path $credentialsFolder)) {
+    $null = New-Item -Path $credentialsFolder -ItemType Directory -Force
+}
+$credentialsXmlPath = Join-Path $credentialsFolder "ArchiveCredentials.xml"
 $defaultNasPath = "\\10.69.88.82\Backups\ARCHIVE\SQLDATA"
 
 Write-Host ""
 Write-Host "=== Configuración de Credenciales para Archivo de Bases de Datos ===" -ForegroundColor Cyan
 Write-Host ""
 
+# Mostrar ubicación donde se guardarán las credenciales
+Write-Host "Las credenciales se guardarán en:" -ForegroundColor Cyan
+Write-Host "  $credentialsXmlPath" -ForegroundColor Gray
+Write-Host ""
+
 # Verificar si ya existen credenciales
 $credentialsExist = Test-Path $credentialsXmlPath
 if ($credentialsExist) {
-    Write-Host "Ya existe un archivo de credenciales en:" -ForegroundColor Yellow
-    Write-Host "  $credentialsXmlPath" -ForegroundColor Gray
+    Write-Host "Ya existe un archivo de credenciales." -ForegroundColor Yellow
     Write-Host ""
     $overwrite = Read-Host "¿Desea sobrescribir las credenciales existentes? (S/N)"
     if ($overwrite.Trim().ToUpper() -notin @("S", "SI", "Y", "YES")) {

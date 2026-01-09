@@ -25,7 +25,12 @@ if (-not $isAdmin) {
 $SqlServerInstance = "localhost"  # Configurar según necesidad: "SERVERNAME" o "SERVERNAME\INSTANCE"
 $SqlDataPath = "G:\SQLDATA"
 $NasArchivePath = "\\10.69.88.82\Backups\ARCHIVE\SQLDATA"
-$CredentialsXmlPath = Join-Path $PSScriptRoot "ArchiveCredentials.xml"
+# Archivo de credenciales en ubicación persistente (fuera de la carpeta del script)
+$credentialsFolder = Join-Path $env:ProgramData "iTrafficServerTools"
+if (-not (Test-Path $credentialsFolder)) {
+    $null = New-Item -Path $credentialsFolder -ItemType Directory -Force
+}
+$CredentialsXmlPath = Join-Path $credentialsFolder "ArchiveCredentials.xml"
 $RetentionMonths = 3  # Archivar bases más antiguas que este número de meses
 $DatabaseNamePattern = "iTraffic_EurovipsLogs"
 
