@@ -416,16 +416,30 @@ $now = Get-Date
 # Archivar: todo lo anterior al último mes que se mantiene (mes anterior al último mantenido)
 $firstDayOfCurrentMonth = Get-Date -Year $now.Year -Month $now.Month -Day 1
 $monthsToKeep = $RetentionMonths + 1
-$cutoffYearMonth = [int]$firstDayOfCurrentMonth.AddMonths(-$monthsToKeep).ToString('yyyyMM')
+$cutoffMonth = $firstDayOfCurrentMonth.AddMonths(-$monthsToKeep) # inclusive: archivar ese mes y anteriores
+$cutoffYearMonthInt = [int]$cutoffMonth.ToString('yyyyMM')
+$cutoffYearMonthHuman = $cutoffMonth.ToString('yyyy-MM')
 $existingDbNames = $logDatabases | ForEach-Object { $_.Name }
 
 if ($logDatabases.Count -gt 0) {
     Write-Host "  Bases de datos encontradas: $($logDatabases.Count)" -ForegroundColor Green
     Write-Host "Criterio de retención: Mantener $monthsToKeep meses (mes actual + $RetentionMonths meses anteriores)" -ForegroundColor Cyan
-    Write-Host "  Se archivan bases <=: $cutoffYearMonth" -ForegroundColor Gray
+    Write-Host "  Se archivan bases <=: $cutoffYearMonthHuman ($cutoffYearMonthInt)" -ForegroundColor Gray
+    $oldestDb = $logDatabases | Select-Object -First 1
+    $newestDb = $logDatabases | Select-Object -Last 1
+    if ($oldestDb -and $newestDb) {
+        Write-Host "  Rango encontrado: $($oldestDb.Date.ToString('yyyy-MM')) .. $($newestDb.Date.ToString('yyyy-MM'))" -ForegroundColor Gray
+    }
     Write-Host ""
-    $databasesToArchive = $logDatabases | Where-Object { [int]$_.YearMonth -le $cutoffYearMonth }
+    # Comparar por fecha (más robusto que comparar yyyyMM como número/string)
+    $databasesToArchive = $logDatabases | Where-Object { $_.Date -le $cutoffMonth }
     Write-Host "  Bases de datos a archivar: $($databasesToArchive.Count)" -ForegroundColor Yellow
+    if ($databasesToArchive.Count -gt 0) {
+        Write-Host "  Candidatas (primeras 10 por antigüedad):" -ForegroundColor Gray
+        $databasesToArchive | Select-Object -First 10 | ForEach-Object {
+            Write-Host "    $($_.Name) - $($_.Date.ToString('yyyy-MM'))" -ForegroundColor Gray
+        }
+    }
     Write-Host ""
 } else {
     Write-Host "  No se encontraron bases de datos activas con el patrón '$DatabaseNamePattern*'" -ForegroundColor Gray
