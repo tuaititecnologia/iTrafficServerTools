@@ -415,16 +415,18 @@ $now = Get-Date
 # Ejemplo: retención de 2 meses = mantener mes actual + 2 meses anteriores (3 meses totales)
 # Archivar: todo lo anterior al último mes que se mantiene (mes anterior al último mantenido)
 $firstDayOfCurrentMonth = Get-Date -Year $now.Year -Month $now.Month -Day 1
-$cutoffDate = $firstDayOfCurrentMonth.AddMonths(-$RetentionMonths - 1)
+$monthsToKeep = $RetentionMonths + 1
+$cutoffYearMonth = [int]$firstDayOfCurrentMonth.AddMonths(-$monthsToKeep).ToString('yyyyMM')
 $existingDbNames = $logDatabases | ForEach-Object { $_.Name }
 
 if ($logDatabases.Count -gt 0) {
     Write-Host "  Bases de datos encontradas: $($logDatabases.Count)" -ForegroundColor Green
-    $monthsToKeep = $RetentionMonths + 1
     Write-Host "Criterio de retención: Mantener $monthsToKeep meses (mes actual + $RetentionMonths meses anteriores)" -ForegroundColor Cyan
-    Write-Host "  Se archivan bases <=: $($cutoffDate.ToString('yyyy-MM'))" -ForegroundColor Gray
+    Write-Host "  Se archivan bases <=: $cutoffYearMonth" -ForegroundColor Gray
     Write-Host ""
-    $databasesToArchive = $logDatabases | Where-Object { $_.Date -le $cutoffDate }
+    $databasesToArchive = $logDatabases | Where-Object { [int]$_.YearMonth -le $cutoffYearMonth }
+    Write-Host "  Bases de datos a archivar: $($databasesToArchive.Count)" -ForegroundColor Yellow
+    Write-Host ""
 } else {
     Write-Host "  No se encontraron bases de datos activas con el patrón '$DatabaseNamePattern*'" -ForegroundColor Gray
     Write-Host ""
