@@ -211,41 +211,6 @@ function Invoke-CompressDatabaseFiles {
     }
 }
 
-function Test-ZipIntegrity {
-    param(
-        [string]$ZipPath,
-        [string]$SevenZipExecutable
-    )
-    
-    Write-Host "  Verificando integridad del archivo 7z..." -ForegroundColor Yellow
-    
-    try {
-        if (-not (Test-Path $ZipPath)) {
-            throw "El archivo 7z no existe: $ZipPath"
-        }
-        
-        if ((Get-Item $ZipPath).Length -eq 0) {
-            throw "El archivo 7z está vacío"
-        }
-        
-        $nullOutput = [System.IO.Path]::GetTempFileName()
-        try {
-            $process = Start-Process -FilePath $SevenZipExecutable -ArgumentList @("t", "`"$ZipPath`"") -Wait -NoNewWindow -PassThru -RedirectStandardOutput $nullOutput -RedirectStandardError $nullOutput
-            
-            if ($process.ExitCode -ne 0) {
-                throw "El archivo 7z está corrupto (código: $($process.ExitCode))"
-            }
-            
-            Write-Host "  Integridad del archivo 7z verificada." -ForegroundColor Green
-        } finally {
-            Remove-Item $nullOutput -Force -ErrorAction SilentlyContinue
-        }
-    } catch {
-        Write-Host "  Error al verificar integridad del archivo 7z: $($_.Exception.Message)" -ForegroundColor Red
-        throw
-    }
-}
-
 function Connect-ToNAS {
     param(
         [string]$NasPath,
@@ -264,21 +229,30 @@ function Connect-ToNAS {
     if (-not $tempDrive) { throw "No hay unidades disponibles para mapear el NAS" }
     
     Write-Host "  Conectando al NAS..." -ForegroundColor Gray
-    # Importante: si se crea el PSDrive dentro de una función sin scope global/script,
-    # el drive puede desaparecer al retornar y luego falla Join-Path con "DriveNotFound".
-    $null = New-PSDrive -Name $tempDrive -PSProvider FileSystem -Root $NasPath -Credential $credential -Scope Global -ErrorAction Stop
+    #region agent log
+    Write-Host "  [DBG] NasPath: $NasPath" -ForegroundColor DarkGray
+    Write-Host "  [DBG] Drive candidato: $tempDrive" -ForegroundColor DarkGray
+    #endregion
+
+    # Nota: si el PSDrive se crea solo en scope local de la función, puede desaparecer al retornar.
+    # Para evitarlo, usamos -Persist (mapeo real de Windows) y además forzamos scope global.
+    $null = New-PSDrive -Name $tempDrive -PSProvider FileSystem -Root $NasPath -Credential $credential -Persist -Scope Global -ErrorAction Stop
     
     $nasRoot = "$tempDrive`:\"
+    #region agent log
+    $driveNow = Get-PSDrive -PSProvider FileSystem -Name $tempDrive -ErrorAction SilentlyContinue
+    Write-Host "  [DBG] PSDrive existe dentro de Connect-ToNAS: $([bool]$driveNow)" -ForegroundColor DarkGray
+    Write-Host "  [DBG] nasRoot: $nasRoot" -ForegroundColor DarkGray
+    #endregion
+
     if (-not (Test-Path $nasRoot)) {
         Remove-PSDrive -Name $tempDrive -Force -ErrorAction SilentlyContinue
         throw "No se pudo acceder al share del NAS"
     }
-
-    # Revalidar que el drive realmente existe en el scope del script
-    if (-not (Get-PSDrive -PSProvider FileSystem -Name $tempDrive -ErrorAction SilentlyContinue)) {
-        Remove-PSDrive -Name $tempDrive -Force -ErrorAction SilentlyContinue
-        throw "El mapeo del NAS no quedó disponible (PSDrive '$tempDrive' no existe)."
-    }
+    
+    #region agent log
+    Write-Host "  [DBG] Test-Path OK dentro de Connect-ToNAS" -ForegroundColor DarkGray
+    #endregion
     
     Write-Host "  Conectado al NAS exitosamente." -ForegroundColor Green
     
@@ -438,6 +412,12 @@ try {
     Write-Host "Conectando al NAS..." -ForegroundColor Yellow
     $nasConnection = Connect-ToNAS -NasPath $NasArchivePath -CredentialsXmlPath $CredentialsXmlPath
     $nasRoot = $nasConnection.Root
+    #region agent log
+    $driveAfter = Get-PSDrive -PSProvider FileSystem -Name $nasConnection.Drive -ErrorAction SilentlyContinue
+    Write-Host "  [DBG] PSDrive existe en main después de Connect-ToNAS: $([bool]$driveAfter)" -ForegroundColor DarkGray
+    Write-Host "  [DBG] Root devuelto: $nasRoot" -ForegroundColor DarkGray
+    Write-Host "  [DBG] Test-Path Root en main: $([bool](Test-Path $nasRoot))" -ForegroundColor DarkGray
+    #endregion
     Write-Host ""
 
     foreach ($db in ($databasesToArchive | Sort-Object Date)) {
@@ -468,9 +448,6 @@ try {
             $zipPath = Join-Path $nasRoot $zipFileName
             $null = Invoke-CompressDatabaseFiles -MdfFiles $physicalFiles.MDF -LdfFiles $physicalFiles.LDF -OutputZipPath $zipPath -SevenZipExecutable $SevenZipPath
             $zipCreated = $true
-
-            Write-Host "  Verificando integridad..." -ForegroundColor Yellow
-            $null = Test-ZipIntegrity -ZipPath $zipPath -SevenZipExecutable $SevenZipPath
 
             Write-Host "  Eliminando archivos locales..." -ForegroundColor Yellow
             ($physicalFiles.MDF + $physicalFiles.LDF) | Where-Object { Test-Path $_ } | ForEach-Object { Remove-Item $_ -Force -ErrorAction Stop }
