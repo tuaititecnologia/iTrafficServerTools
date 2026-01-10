@@ -412,8 +412,8 @@ try {
 
 $now = Get-Date
 # Retención de N meses: mantener mes actual + N meses anteriores
-# Ejemplo: retención de 2 meses en Enero = mantener Enero, Diciembre, Noviembre (3 meses totales)
-# Archivar: Octubre y anteriores (mes anterior al último que mantenemos)
+# Ejemplo: retención de 2 meses = mantener mes actual + 2 meses anteriores (3 meses totales)
+# Archivar: todo lo anterior al último mes que se mantiene (mes anterior al último mantenido)
 $firstDayOfCurrentMonth = Get-Date -Year $now.Year -Month $now.Month -Day 1
 $cutoffDate = $firstDayOfCurrentMonth.AddMonths(-$RetentionMonths - 1)
 $existingDbNames = $logDatabases | ForEach-Object { $_.Name }
@@ -422,7 +422,7 @@ if ($logDatabases.Count -gt 0) {
     Write-Host "  Bases de datos encontradas: $($logDatabases.Count)" -ForegroundColor Green
     $monthsToKeep = $RetentionMonths + 1
     Write-Host "Criterio de retención: Mantener $monthsToKeep meses (mes actual + $RetentionMonths meses anteriores)" -ForegroundColor Cyan
-    Write-Host "  Se archivan bases más antiguas que: $($cutoffDate.ToString('yyyy-MM'))" -ForegroundColor Gray
+    Write-Host "  Se archivan bases <=: $($cutoffDate.ToString('yyyy-MM'))" -ForegroundColor Gray
     Write-Host ""
     $databasesToArchive = $logDatabases | Where-Object { $_.Date -le $cutoffDate }
 } else {
