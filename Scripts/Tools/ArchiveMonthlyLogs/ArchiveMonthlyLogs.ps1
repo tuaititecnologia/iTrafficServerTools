@@ -264,12 +264,20 @@ function Connect-ToNAS {
     if (-not $tempDrive) { throw "No hay unidades disponibles para mapear el NAS" }
     
     Write-Host "  Conectando al NAS..." -ForegroundColor Gray
-    $null = New-PSDrive -Name $tempDrive -PSProvider FileSystem -Root $NasPath -Credential $credential -ErrorAction Stop
+    # Importante: si se crea el PSDrive dentro de una función sin scope global/script,
+    # el drive puede desaparecer al retornar y luego falla Join-Path con "DriveNotFound".
+    $null = New-PSDrive -Name $tempDrive -PSProvider FileSystem -Root $NasPath -Credential $credential -Scope Global -ErrorAction Stop
     
     $nasRoot = "$tempDrive`:\"
     if (-not (Test-Path $nasRoot)) {
         Remove-PSDrive -Name $tempDrive -Force -ErrorAction SilentlyContinue
         throw "No se pudo acceder al share del NAS"
+    }
+
+    # Revalidar que el drive realmente existe en el scope del script
+    if (-not (Get-PSDrive -PSProvider FileSystem -Name $tempDrive -ErrorAction SilentlyContinue)) {
+        Remove-PSDrive -Name $tempDrive -Force -ErrorAction SilentlyContinue
+        throw "El mapeo del NAS no quedó disponible (PSDrive '$tempDrive' no existe)."
     }
     
     Write-Host "  Conectado al NAS exitosamente." -ForegroundColor Green
