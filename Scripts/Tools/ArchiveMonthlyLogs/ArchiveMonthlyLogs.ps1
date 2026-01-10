@@ -31,7 +31,7 @@ if (-not (Test-Path $credentialsFolder)) {
     $null = New-Item -Path $credentialsFolder -ItemType Directory -Force
 }
 $CredentialsXmlPath = Join-Path $credentialsFolder "ArchiveCredentials.xml"
-$RetentionMonths = 2  # Número de meses anteriores al mes actual a mantener (el mes actual siempre se mantiene). Ejemplo: 2 = mantener mes actual + 2 meses anteriores
+$RetentionMonths = 2  # Retention (estándar IT): conservar los últimos N meses completos anteriores; el mes actual (en curso) siempre se conserva. Ej: 2 => conservar mes actual + 2 meses anteriores (3 meses visibles).
 $DatabaseNamePattern = "iTraffic_EurovipsLogs"
 
 # Ruta del ejecutable de 7-Zip (ajustar según instalación si está en otra ubicación)
@@ -281,45 +281,6 @@ function Connect-ToNAS {
     }
 }
 
-function Get-OrphanedDatabaseFiles {
-    param(
-        [string]$SqlDataPath,
-        [string]$Pattern,
-        [array]$ExistingDbNames
-    )
-    
-    Write-Host "Buscando archivos huérfanos (desacoplados)..." -ForegroundColor Yellow
-    
-    try {
-        $orphanedFiles = @()
-        
-        Get-ChildItem -Path $SqlDataPath -Filter "${Pattern}*.mdf" -File | ForEach-Object {
-            $dbName = $_.BaseName
-            if ($dbName -match "^${Pattern}(\d{6})$" -and $dbName -notin $ExistingDbNames) {
-                $ldfPath = Join-Path $SqlDataPath "${dbName}_log.ldf"
-                if (Test-Path $ldfPath) {
-                    try {
-                        $dateStr = $matches[1]
-                        $date = Get-Date -Year ([int]$dateStr.Substring(0, 4)) -Month ([int]$dateStr.Substring(4, 2)) -Day 1
-                        $orphanedFiles += [PSCustomObject]@{
-                            DatabaseName = $dbName
-                            Date = $date
-                            YearMonth = $dateStr
-                            MdfPath = $_.FullName
-                            LdfPath = $ldfPath
-                        }
-                    } catch { }
-                }
-            }
-        }
-        
-        return $orphanedFiles | Sort-Object Date
-    } catch {
-        Write-Host "  Error buscando archivos huérfanos: $($_.Exception.Message)" -ForegroundColor Red
-        throw
-    }
-}
-
 function Invoke-CreateNewLogDatabase {
     param(
         [string]$ServerInstance,
@@ -411,19 +372,21 @@ try {
 }
 
 $now = Get-Date
-# Retención de N meses: mantener mes actual + N meses anteriores
-# Ejemplo: retención de 2 meses = mantener mes actual + 2 meses anteriores (3 meses totales)
-# Archivar: todo lo anterior al último mes que se mantiene (mes anterior al último mantenido)
+# Retention (estándar IT):
+# - retention = N => conservar los últimos N meses completos anteriores
+# - el mes actual (en curso) siempre se conserva
+# Ejemplo: si hoy es Enero y retention=2 => conservar Ene+Dic+Nov; archivar Oct y anteriores
 $firstDayOfCurrentMonth = Get-Date -Year $now.Year -Month $now.Month -Day 1
 $monthsToKeep = $RetentionMonths + 1
 $cutoffMonth = $firstDayOfCurrentMonth.AddMonths(-$monthsToKeep) # inclusive: archivar ese mes y anteriores
 $cutoffYearMonthInt = [int]$cutoffMonth.ToString('yyyyMM')
 $cutoffYearMonthHuman = $cutoffMonth.ToString('yyyy-MM')
-$existingDbNames = $logDatabases | ForEach-Object { $_.Name }
 
 if ($logDatabases.Count -gt 0) {
     Write-Host "  Bases de datos encontradas: $($logDatabases.Count)" -ForegroundColor Green
-    Write-Host "Criterio de retención: Mantener $monthsToKeep meses (mes actual + $RetentionMonths meses anteriores)" -ForegroundColor Cyan
+    Write-Host "Retention: conservar $RetentionMonths meses completos anteriores + mes actual" -ForegroundColor Cyan
+    Write-Host "  Mes actual: $($firstDayOfCurrentMonth.ToString('yyyy-MM'))" -ForegroundColor Gray
+    Write-Host "  Mes más antiguo que se conserva (inclusive): $($firstDayOfCurrentMonth.AddMonths(-$RetentionMonths).ToString('yyyy-MM'))" -ForegroundColor Gray
     Write-Host "  Se archivan bases <=: $cutoffYearMonthHuman ($cutoffYearMonthInt)" -ForegroundColor Gray
     $oldestDb = $logDatabases | Select-Object -First 1
     $newestDb = $logDatabases | Select-Object -Last 1
@@ -432,7 +395,7 @@ if ($logDatabases.Count -gt 0) {
     }
     Write-Host ""
     # Comparar por fecha (más robusto que comparar yyyyMM como número/string)
-    $databasesToArchive = $logDatabases | Where-Object { $_.Date -le $cutoffMonth }
+    $databasesToArchive = @($logDatabases | Where-Object { $_.Date -le $cutoffMonth })
     Write-Host "  Bases de datos a archivar: $($databasesToArchive.Count)" -ForegroundColor Yellow
     if ($databasesToArchive.Count -gt 0) {
         Write-Host "  Candidatas (primeras 10 por antigüedad):" -ForegroundColor Gray
@@ -447,193 +410,144 @@ if ($logDatabases.Count -gt 0) {
     $databasesToArchive = @()
 }
 
-# Buscar archivos huérfanos (desacoplados pero nunca archivados)
-Write-Host ""
-$orphanedFiles = Get-OrphanedDatabaseFiles -SqlDataPath $SqlDataPath -Pattern $DatabaseNamePattern -ExistingDbNames $existingDbNames
-
-if ($orphanedFiles.Count -gt 0) {
-    Write-Host "  Archivos huérfanos encontrados: $($orphanedFiles.Count)" -ForegroundColor Yellow
-    $processOrphaned = $true
-    $targetOrphaned = $orphanedFiles | Select-Object -First 1
-    $targetFiles = @{ MDF = @($targetOrphaned.MdfPath); LDF = @($targetOrphaned.LdfPath) }
-    $targetDatabase = [PSCustomObject]@{ Name = $targetOrphaned.DatabaseName; Date = $targetOrphaned.Date }
-    Write-Host "Procesando archivos huérfanos (desacoplados)..." -ForegroundColor Yellow
-} elseif ($databasesToArchive.Count -gt 0) {
-    $processOrphaned = $false
-    $targetDatabase = $databasesToArchive | Select-Object -First 1
-    Write-Host "Procesando base de datos activa..." -ForegroundColor Cyan
-} else {
+if ($databasesToArchive.Count -eq 0) {
     Write-Host "No hay bases de datos que requieran archivo." -ForegroundColor Green
-    Write-Host "Todas las bases de datos están dentro del período de retención y no hay archivos huérfanos." -ForegroundColor Green
+    Write-Host "Todas las bases de datos están dentro del período de retención." -ForegroundColor Green
     Write-Host ""
     exit 0
 }
+
+Write-Host ""
+Write-Host "=== Iniciando Proceso de Archivo (lote) ===" -ForegroundColor Cyan
 Write-Host ""
 
-Write-Host "Base de datos/archivos seleccionados para archivo:" -ForegroundColor Cyan
-Write-Host "  Nombre: $($targetDatabase.Name)" -ForegroundColor White
-Write-Host "  Fecha: $($targetDatabase.Date.ToString('yyyy-MM'))" -ForegroundColor White
-Write-Host "  Antigüedad: $([math]::Round(($now - $targetDatabase.Date).TotalDays / 30, 1)) meses" -ForegroundColor White
-if ($processOrphaned) {
-    Write-Host "  Tipo: Archivos huérfanos (desacoplados)" -ForegroundColor Yellow
-} else {
-    Write-Host "  Tipo: Base de datos activa" -ForegroundColor Gray
-}
-Write-Host ""
-
-# Obtener archivos físicos
-if ($processOrphaned) {
-    # Ya tenemos los archivos de los huérfanos
-    $physicalFiles = $targetFiles
-} else {
-    Write-Host "Obteniendo información de archivos físicos..." -ForegroundColor Yellow
-    try {
-        $physicalFiles = Get-DatabasePhysicalFiles -ServerInstance $SqlServerInstance -DatabaseName $targetDatabase.Name
-    } catch {
-        Write-Host ""
-        Write-Host "Error: No se pudieron obtener los archivos físicos." -ForegroundColor Red
-        Write-Host "  Error: $($_.Exception.Message)" -ForegroundColor Yellow
-        Write-Host ""
-        exit 1
-    }
-}
-
-if ($physicalFiles.MDF.Count -eq 0 -or $physicalFiles.LDF.Count -eq 0) {
-    Write-Host ""
-    Write-Host "Error: No se encontraron archivos MDF o LDF para la base de datos." -ForegroundColor Red
-    Write-Host ""
-    exit 1
-}
-
-Write-Host "  Archivos encontrados:" -ForegroundColor Green
-$physicalFiles.MDF | ForEach-Object { Write-Host "    MDF: $_" -ForegroundColor Gray }
-$physicalFiles.LDF | ForEach-Object { Write-Host "    LDF: $_" -ForegroundColor Gray }
-Write-Host ""
-
-# Calcular espacio que se liberará
-$totalSizeMB = [math]::Round((($physicalFiles.MDF + $physicalFiles.LDF) | Where-Object { Test-Path $_ } | ForEach-Object { (Get-Item $_).Length } | Measure-Object -Sum).Sum / 1MB, 2)
-
-Write-Host "Espacio que se liberará: $totalSizeMB MB" -ForegroundColor Cyan
-Write-Host ""
-
-# Proceso de archivo
-Write-Host "=== Iniciando Proceso de Archivo ===" -ForegroundColor Cyan
-Write-Host ""
-
-$detached = $false
 $nasConnection = $null
-$zipPath = $null
-$zipCreated = $false
+$archivedDatabases = @()
+$failedDatabases = @()
+$totalFreedMB = 0.0
 
 try {
-    # 1. Conectar al NAS
-    Write-Host "[1/6] Conectando al NAS..." -ForegroundColor Yellow
+    Write-Host "Conectando al NAS..." -ForegroundColor Yellow
     $nasConnection = Connect-ToNAS -NasPath $NasArchivePath -CredentialsXmlPath $CredentialsXmlPath
-    $nasDrive = $nasConnection.Drive
     $nasRoot = $nasConnection.Root
     Write-Host ""
-    
-    # 2. Detach de la base de datos (solo si no son archivos huérfanos)
-    if (-not $processOrphaned) {
-        Write-Host "[2/6] Desacoplando base de datos..." -ForegroundColor Yellow
-        $null = Invoke-DetachDatabase -ServerInstance $SqlServerInstance -DatabaseName $targetDatabase.Name
-        $detached = $true
-        Write-Host ""
-    } else {
-        Write-Host "[2/6] Archivos ya desacoplados (huérfanos). Omitiendo paso de detach." -ForegroundColor Gray
-        Write-Host ""
+
+    foreach ($db in ($databasesToArchive | Sort-Object Date)) {
+        Write-Host "Procesando: $($db.Name) ($($db.Date.ToString('yyyy-MM')))" -ForegroundColor Cyan
+
+        $detached = $false
+        $zipPath = $null
+        $zipCreated = $false
+        $physicalFiles = $null
+
+        try {
+            Write-Host "  Obteniendo información de archivos físicos..." -ForegroundColor Yellow
+            $physicalFiles = Get-DatabasePhysicalFiles -ServerInstance $SqlServerInstance -DatabaseName $db.Name
+
+            if ($physicalFiles.MDF.Count -eq 0 -or $physicalFiles.LDF.Count -eq 0) {
+                throw "No se encontraron archivos MDF o LDF para la base de datos."
+            }
+
+            $dbFreedMB = [math]::Round((($physicalFiles.MDF + $physicalFiles.LDF) | Where-Object { Test-Path $_ } | ForEach-Object { (Get-Item $_).Length } | Measure-Object -Sum).Sum / 1MB, 2)
+            Write-Host "  Espacio estimado a liberar: $dbFreedMB MB" -ForegroundColor Gray
+
+            Write-Host "  Desacoplando base de datos..." -ForegroundColor Yellow
+            $null = Invoke-DetachDatabase -ServerInstance $SqlServerInstance -DatabaseName $db.Name
+            $detached = $true
+
+            Write-Host "  Comprimiendo archivos directamente en el NAS..." -ForegroundColor Yellow
+            $zipFileName = "$($db.Name).7z"
+            $zipPath = Join-Path $nasRoot $zipFileName
+            $null = Invoke-CompressDatabaseFiles -MdfFiles $physicalFiles.MDF -LdfFiles $physicalFiles.LDF -OutputZipPath $zipPath -SevenZipExecutable $SevenZipPath
+            $zipCreated = $true
+
+            Write-Host "  Verificando integridad..." -ForegroundColor Yellow
+            $null = Test-ZipIntegrity -ZipPath $zipPath -SevenZipExecutable $SevenZipPath
+
+            Write-Host "  Eliminando archivos locales..." -ForegroundColor Yellow
+            ($physicalFiles.MDF + $physicalFiles.LDF) | Where-Object { Test-Path $_ } | ForEach-Object { Remove-Item $_ -Force -ErrorAction Stop }
+            Write-Host "  OK" -ForegroundColor Green
+
+            $archivedDatabases += $db
+            $totalFreedMB += $dbFreedMB
+            Write-Host ""
+        } catch {
+            Write-Host "  ERROR: $($_.Exception.Message)" -ForegroundColor Red
+
+            # Limpiar: eliminar ZIP parcial si fue creado
+            if ($zipCreated -and $zipPath) {
+                Write-Host "  Limpiando ZIP parcial en NAS..." -ForegroundColor Yellow
+                try {
+                    if (Test-Path $zipPath) { Remove-Item $zipPath -Force -ErrorAction Stop }
+                } catch {
+                    Write-Host "  Advertencia: no se pudo borrar ZIP parcial: $($_.Exception.Message)" -ForegroundColor Yellow
+                }
+            }
+
+            # Rollback: re-attach si se desacopló y todavía existen los archivos
+            if ($detached -and $physicalFiles -and $physicalFiles.MDF.Count -gt 0 -and $physicalFiles.LDF.Count -gt 0 -and (Test-Path $physicalFiles.MDF[0]) -and (Test-Path $physicalFiles.LDF[0])) {
+                Write-Host "  Intentando restaurar (ATTACH)..." -ForegroundColor Yellow
+                try {
+                    $escapedName = $db.Name.Replace("'", "''")
+                    $attachQuery = "CREATE DATABASE [$escapedName] ON (FILENAME = '$($physicalFiles.MDF[0].Replace("'", "''"))'), (FILENAME = '$($physicalFiles.LDF[0].Replace("'", "''"))') FOR ATTACH;"
+                    Invoke-SqlcmdQuery -ServerInstance $SqlServerInstance -Query $attachQuery | Out-Null
+                    Write-Host "  Restaurada." -ForegroundColor Green
+                } catch {
+                    Write-Host "  Error al restaurar: $($_.Exception.Message)" -ForegroundColor Red
+                }
+            }
+
+            $failedDatabases += $db
+            Write-Host ""
+            continue
+        }
     }
-    
-    # 3. Comprimir archivos directamente en el NAS
-    Write-Host "[3/6] Comprimiendo archivos directamente en el NAS..." -ForegroundColor Yellow
-    $zipFileName = "$($targetDatabase.Name).7z"
-    $zipPath = Join-Path $nasRoot $zipFileName
-    
-    $null = Invoke-CompressDatabaseFiles -MdfFiles $physicalFiles.MDF -LdfFiles $physicalFiles.LDF -OutputZipPath $zipPath -SevenZipExecutable $SevenZipPath
-    $zipCreated = $true
+} catch {
     Write-Host ""
-    
-    # 4. Verificar integridad del archivo 7z
-    Write-Host "[4/6] Verificando integridad del archivo 7z..." -ForegroundColor Yellow
-    $null = Test-ZipIntegrity -ZipPath $zipPath -SevenZipExecutable $SevenZipPath
+    Write-Host "=== Error General ===" -ForegroundColor Red
+    Write-Host "  Error: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host ""
-    
-    # 5. Eliminar archivos locales
-    Write-Host "[5/6] Eliminando archivos locales..." -ForegroundColor Yellow
-    ($physicalFiles.MDF + $physicalFiles.LDF) | Where-Object { Test-Path $_ } | ForEach-Object { Remove-Item $_ -Force -ErrorAction Stop }
-    Write-Host "  Archivos eliminados." -ForegroundColor Green
-    Write-Host ""
-    
-    # 6. Desconectar del NAS
-    Remove-PSDrive -Name $nasDrive -Force -ErrorAction SilentlyContinue
-    $nasConnection = $null
-    Write-Host ""
-    
-    # 7. Crear nueva base de datos para el mes siguiente (solo si se archivó una base activa)
-    $newDatabaseName = $null
-    if (-not $processOrphaned) {
-        Write-Host "[6/6] Creando nueva base de datos..." -ForegroundColor Yellow
-        $newDatabaseName = "$DatabaseNamePattern$($now.AddMonths(1).ToString('yyyyMM'))"
-        
+    exit 1
+} finally {
+    if ($nasConnection) {
+        Remove-PSDrive -Name $nasConnection.Drive -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# Crear nueva base de datos para el mes siguiente (solo si se archivó al menos una)
+$newDatabaseName = $null
+if ($archivedDatabases.Count -gt 0) {
+    Write-Host "Creando/verificando nueva base de datos del mes siguiente..." -ForegroundColor Yellow
+    $newDatabaseName = "$DatabaseNamePattern$($now.AddMonths(1).ToString('yyyyMM'))"
+    try {
         $existingDbs = Get-LogDatabases -ServerInstance $SqlServerInstance -Pattern $DatabaseNamePattern
         if ($existingDbs.Name -contains $newDatabaseName) {
             Write-Host "  La base de datos $newDatabaseName ya existe." -ForegroundColor Yellow
         } else {
             $null = Invoke-CreateNewLogDatabase -ServerInstance $SqlServerInstance -DatabaseName $newDatabaseName -SqlDataPath $SqlDataPath
         }
+    } catch {
+        Write-Host "  Advertencia: no se pudo crear/verificar la nueva base: $($_.Exception.Message)" -ForegroundColor Yellow
     }
     Write-Host ""
-    
-    Write-Host "=== Proceso Completado Exitosamente ===" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "Resumen:" -ForegroundColor Cyan
-    Write-Host "  Base de datos/archivos archivados: $($targetDatabase.Name)" -ForegroundColor White
-    Write-Host "  Espacio liberado: $totalSizeMB MB" -ForegroundColor White
-    Write-Host "  Archivo en NAS: $NasArchivePath\$zipFileName" -ForegroundColor White
-    if ($newDatabaseName) {
-        Write-Host "  Nueva base de datos: $newDatabaseName" -ForegroundColor White
-    }
-    Write-Host ""
-    
-    exit 0
-    
-} catch {
-    Write-Host ""
-    Write-Host "=== Error Durante el Proceso ===" -ForegroundColor Red
-    Write-Host "  Error: $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host ""
-    
-    # Limpiar: Eliminar archivo temporal si fue creado
-    if ($zipCreated -and $zipPath -and $nasConnection) {
-        Write-Host "Eliminando archivo temporal en el NAS..." -ForegroundColor Yellow
-        try {
-            if (Test-Path $zipPath) {
-                Remove-Item $zipPath -Force -ErrorAction Stop
-                Write-Host "  Archivo temporal eliminado exitosamente." -ForegroundColor Green
-            }
-        } catch {
-            Write-Host "  Advertencia: No se pudo eliminar el archivo temporal: $($_.Exception.Message)" -ForegroundColor Yellow
-        }
-    }
-    
-    # Limpiar: Desconectar del NAS si está mapeado
-    if ($nasConnection) {
-        Remove-PSDrive -Name $nasConnection.Drive -Force -ErrorAction SilentlyContinue
-    }
-    
-    # Rollback: Re-attach de la base de datos si fue desacoplada (solo si no eran archivos huérfanos)
-    if ($detached -and -not $processOrphaned -and $physicalFiles.MDF.Count -gt 0 -and (Test-Path $physicalFiles.MDF[0])) {
-        Write-Host "Intentando restaurar la base de datos..." -ForegroundColor Yellow
-        try {
-            $escapedName = $targetDatabase.Name.Replace("'", "''")
-            $attachQuery = "CREATE DATABASE [$escapedName] ON (FILENAME = '$($physicalFiles.MDF[0].Replace("'", "''"))'), (FILENAME = '$($physicalFiles.LDF[0].Replace("'", "''"))') FOR ATTACH;"
-            Invoke-SqlcmdQuery -ServerInstance $SqlServerInstance -Query $attachQuery | Out-Null
-            Write-Host "  Base de datos restaurada exitosamente." -ForegroundColor Green
-        } catch {
-            Write-Host "  Error al restaurar: $($_.Exception.Message)" -ForegroundColor Red
-        }
-    }
-    
-    Write-Host ""
-    exit 1
 }
+
+Write-Host "=== Resumen ===" -ForegroundColor Cyan
+Write-Host "  Archivadas: $($archivedDatabases.Count)" -ForegroundColor White
+if ($archivedDatabases.Count -gt 0) {
+    $archivedDatabases | ForEach-Object { Write-Host "    - $($_.Name) ($($_.Date.ToString('yyyy-MM')))" -ForegroundColor Gray }
+}
+Write-Host "  Fallidas: $($failedDatabases.Count)" -ForegroundColor White
+if ($failedDatabases.Count -gt 0) {
+    $failedDatabases | ForEach-Object { Write-Host "    - $($_.Name) ($($_.Date.ToString('yyyy-MM')))" -ForegroundColor Yellow }
+}
+Write-Host "  Espacio total liberado (estimado): $([math]::Round($totalFreedMB, 2)) MB" -ForegroundColor White
+if ($archivedDatabases.Count -gt 0) {
+    Write-Host "  Archivos en NAS: $NasArchivePath\*.7z" -ForegroundColor White
+}
+if ($newDatabaseName) {
+    Write-Host "  Nueva base de datos: $newDatabaseName" -ForegroundColor White
+}
+Write-Host ""
+
+if ($failedDatabases.Count -gt 0) { exit 1 } else { exit 0 }
