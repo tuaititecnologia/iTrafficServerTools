@@ -31,7 +31,7 @@ if (-not (Test-Path $credentialsFolder)) {
     $null = New-Item -Path $credentialsFolder -ItemType Directory -Force
 }
 $CredentialsXmlPath = Join-Path $credentialsFolder "ArchiveCredentials.xml"
-$RetentionMonths = 3  # Archivar bases más antiguas que este número de meses
+$RetentionMonths = 2  # Número de meses anteriores al mes actual a mantener (el mes actual siempre se mantiene). Ejemplo: 2 = mantener mes actual + 2 meses anteriores
 $DatabaseNamePattern = "iTraffic_EurovipsLogs"
 
 # Ruta del ejecutable de 7-Zip (ajustar según instalación si está en otra ubicación)
@@ -411,15 +411,20 @@ try {
 }
 
 $now = Get-Date
-$cutoffDate = $now.AddMonths(-$RetentionMonths)
+# Retención de N meses: mantener mes actual + N meses anteriores
+# Ejemplo: retención de 2 meses en Enero = mantener Enero, Diciembre, Noviembre (3 meses totales)
+# Archivar: Octubre y anteriores (mes anterior al último que mantenemos)
+$firstDayOfCurrentMonth = Get-Date -Year $now.Year -Month $now.Month -Day 1
+$cutoffDate = $firstDayOfCurrentMonth.AddMonths(-$RetentionMonths - 1)
 $existingDbNames = $logDatabases | ForEach-Object { $_.Name }
 
 if ($logDatabases.Count -gt 0) {
     Write-Host "  Bases de datos encontradas: $($logDatabases.Count)" -ForegroundColor Green
-    Write-Host "Criterio de retención: Archivar bases más antiguas que $RetentionMonths meses" -ForegroundColor Cyan
-    Write-Host "  Fecha de corte: $($cutoffDate.ToString('yyyy-MM'))" -ForegroundColor Gray
+    $monthsToKeep = $RetentionMonths + 1
+    Write-Host "Criterio de retención: Mantener $monthsToKeep meses (mes actual + $RetentionMonths meses anteriores)" -ForegroundColor Cyan
+    Write-Host "  Se archivan bases más antiguas que: $($cutoffDate.ToString('yyyy-MM'))" -ForegroundColor Gray
     Write-Host ""
-    $databasesToArchive = $logDatabases | Where-Object { $_.Date -lt $cutoffDate }
+    $databasesToArchive = $logDatabases | Where-Object { $_.Date -le $cutoffDate }
 } else {
     Write-Host "  No se encontraron bases de datos activas con el patrón '$DatabaseNamePattern*'" -ForegroundColor Gray
     Write-Host ""
