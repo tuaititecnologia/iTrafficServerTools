@@ -1,7 +1,8 @@
 $ErrorActionPreference= 'silentlycontinue'
 
 # Assign the value random password to the password variable
-$rustdesk_pw=(-join ((65..90) + (97..122) | Get-Random -Count 12 | % {[char]$_}))
+# $rustdesk_pw=(-join ((65..90) + (97..122) | Get-Random -Count 12 | % {[char]$_}))
+$rustdesk_pw="Softur.04"
 
 # Get your config string from your Web portal and Fill Below
 $rustdesk_cfg="9JSP3N3VR5kcK50QWB1YStyMmVXeFVXZ3dDZTJ1M0pHerM0bVdHV5lEOjpUcTJiOikXZrJCLiIiOikGchJCLiIiOikXYsVmciwiIyFmLt92YuIXd0Z2bz5yciJGaiojI0N3boJye"
@@ -16,6 +17,16 @@ if (-Not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
         Start-Process PowerShell -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"cd '$pwd'; & '$PSCommandPath';`"";
         Exit;
     }
+}
+
+# Uninstall TeamViewer 12 if installed
+$teamviewerUninstallPath = "C:\Program Files (x86)\TeamViewer\uninstall.exe"
+if (Test-Path $teamviewerUninstallPath)
+{
+    Write-Output "Desinstalando TeamViewer 12..."
+    Start-Process -FilePath $teamviewerUninstallPath -ArgumentList "/S" -Wait
+    Start-Sleep -Seconds 5
+    Write-Output "TeamViewer 12 desinstalado."
 }
 
 # This function will return the latest version and download link as an object
@@ -114,3 +125,6 @@ Write-Output "RustDesk ID: $rustdesk_id"
 # Show the value of the Password Variable
 Write-Output "Password: $rustdesk_pw"
 Write-Output "..............................................."
+
+# Pause to allow copying the password
+Read-Host "Presione Enter para continuar..."
