@@ -1,5 +1,9 @@
 $ErrorActionPreference= 'silentlycontinue'
 
+# Fix SSL/TLS for Windows Server 2016 and older systems
+# Force TLS 1.2 to work with GitHub and modern HTTPS endpoints
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
 # Assign the value random password to the password variable
 # $rustdesk_pw=(-join ((65..90) + (97..122) | Get-Random -Count 12 | % {[char]$_}))
 $rustdesk_pw="Softur.04"

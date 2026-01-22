@@ -1,3 +1,7 @@
+# Fix SSL/TLS for Windows Server 2016 and older systems
+# Force TLS 1.2 to work with modern HTTPS endpoints
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
 $sqlInstallerUrl = "https://go.microsoft.com/fwlink/?linkid=866658"
 $sqlInstallerPath = "$env:TEMP\sqlexpress_web.exe"
 Invoke-WebRequest -Uri $sqlInstallerUrl -OutFile $sqlInstallerPath

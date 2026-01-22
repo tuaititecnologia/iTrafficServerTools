@@ -1,6 +1,10 @@
 # Update iTraffic Server Tools
 # Usage: irm https://tuaiti.com.ar/scripts/itraffic | iex
 
+# Fix SSL/TLS for Windows Server 2016 and older systems
+# Force TLS 1.2 to work with GitHub and modern HTTPS endpoints
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
 Write-Host "Updating iTraffic Server Tools..." -ForegroundColor Yellow
 Write-Host ""
 Write-Host "This will update the iTraffic Server Tools to the latest version." -ForegroundColor Yellow

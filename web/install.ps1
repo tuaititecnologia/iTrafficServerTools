@@ -4,6 +4,10 @@
 
 $ErrorActionPreference = 'Continue'
 
+# Fix SSL/TLS for Windows Server 2016 and older systems
+# Force TLS 1.2 to work with GitHub and modern HTTPS endpoints
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
 $ScriptsRepo = "https://raw.githubusercontent.com/tuaititecnologia/iTrafficServerTools/main/Scripts"
 $ScriptsApiUrl = "https://api.github.com/repos/tuaititecnologia/iTrafficServerTools/contents/Scripts"
 $InstallPath = "$env:SystemDrive\Scripts"
