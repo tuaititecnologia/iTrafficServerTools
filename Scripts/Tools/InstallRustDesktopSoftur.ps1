@@ -36,7 +36,7 @@ if (Test-Path $teamviewerUninstallPath)
 # This function will return the latest version and download link as an object
 function getLatest()
 {
-    $Page = Invoke-WebRequest -Uri 'https://files.tuaiti.com.ar/index.php/s/B7bgH5dyXL6SQ3J/download' -UseBasicParsing
+    $Page = Invoke-WebRequest -Uri 'https://github.com/rustdesk/rustdesk/releases/latest' -UseBasicParsing
     $HTML = New-Object -Com "HTMLFile"
     try
     {
