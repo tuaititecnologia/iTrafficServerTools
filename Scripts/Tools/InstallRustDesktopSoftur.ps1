@@ -119,6 +119,12 @@ cd $env:ProgramFiles\RustDesk\
 .\rustdesk.exe --password $rustdesk_pw
 
 Write-Output "..............................................."
+# Get hostname
+$hostname = $env:COMPUTERNAME
+
+# Show the value of the Hostname
+Write-Output "Hostname: $hostname"
+
 # Show the value of the ID Variable
 Write-Output "RustDesk ID: $rustdesk_id"
 
