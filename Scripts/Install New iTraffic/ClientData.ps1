@@ -1,4 +1,4 @@
-lientData.ps1 - Manejo de datos del cliente con persistencia
+# ClientData.ps1 - Manejo de datos del cliente con persistencia
 
 # Archivo de configuración del cliente
 $configFile = Join-Path $PSScriptRoot "client_config.json"
@@ -101,5 +101,4 @@ function Clear-ClientData {
     }
 }
 
-# Exportar funciones para uso en otros scripts
-Export-ModuleMember -Function Get-ClientData, Save-ClientData, Clear-ClientData
+# Las funciones están disponibles después de dot-sourcing este script
