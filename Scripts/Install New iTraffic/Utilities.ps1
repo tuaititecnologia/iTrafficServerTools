@@ -1,4 +1,4 @@
-(-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
     Write-Host "Winget no está disponible." -ForegroundColor Red
     exit
 }
