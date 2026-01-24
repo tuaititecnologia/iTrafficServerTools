@@ -40,7 +40,7 @@ Cuando se solicite, ingresar:
 - **Nombre de carpeta**: minúsculas y números, sin espacios (ej: cliente123)
 - **Nombre del cliente**: Nombre completo
 
-Los datos se guardan en `client_config.json` para uso futuro.
+Los datos se guardan en `%ProgramData%\iTrafficServerTools\client_config.json` para uso futuro (persisten al actualizar el proyecto).
 
 ### Paso 6: Reiniciar el equipo
 

@@ -1,7 +1,24 @@
 # ClientData.ps1 - Manejo de datos del cliente con persistencia
 
-# Archivo de configuración del cliente
-$configFile = Join-Path $PSScriptRoot "client_config.json"
+# Archivo de configuración del cliente en ubicación persistente (fuera de la carpeta del script)
+# Esto evita que se borre cuando se actualiza el proyecto (mismo patrón que ArchiveCredentials)
+$configFolder = Join-Path $env:ProgramData "iTrafficServerTools"
+if (-not (Test-Path $configFolder)) {
+    $null = New-Item -Path $configFolder -ItemType Directory -Force
+}
+$configFile = Join-Path $configFolder "client_config.json"
+
+# Migración única: si existe el archivo en la ubicación antigua (carpeta del script), moverlo
+$legacyConfigFile = Join-Path $PSScriptRoot "client_config.json"
+if (-not (Test-Path $configFile) -and (Test-Path $legacyConfigFile)) {
+    try {
+        Move-Item -Path $legacyConfigFile -Destination $configFile -Force
+        Write-Host "Configuración movida a la nueva ubicación: $configFile" -ForegroundColor Cyan
+    }
+    catch {
+        Write-Host "No se pudo mover la configuración existente: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+}
 
 function Get-ClientData {
     <#
