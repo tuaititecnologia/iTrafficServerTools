@@ -3,6 +3,7 @@ Set-Location $PSScriptRoot
 
 $user_profile = $env:USERPROFILE
 $osVersion = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -Name 'ProductName').ProductName
+$reflectSource = "\\172.21.15.130\TuaitiBackup\Soft\Reflect\Macrium Reflect 8.0.5946 x64 incl Keygen [CrackingPatching]"
 
 if ($osVersion -notmatch 'Windows Server 2012') {
     Write-Host "Desactivando antivirus"
@@ -38,7 +39,7 @@ foreach ($programName in $programNames) {
 }
 
 Write-Host "Iniciando Reflect Cleaner"
-Start-Process -Wait -FilePath "Reflect\Macrium Reflect 8.0.5946 x64 incl Keygen [CrackingPatching]\Cleaner-hawk007\Cleaner.exe"
+Start-Process -Wait -FilePath "$reflectSource\Cleaner-hawk007\Cleaner.exe"
 
 Write-Host ""
 Write-Host "Instalando Reflect Server Plus"
@@ -48,11 +49,11 @@ Write-Host "QV7E-NR27"
 Write-Host ""
 
 Write-Host "Iniciando Instalador de Reflect"
-Start-Process -Wait -FilePath "Reflect\Macrium Reflect 8.0.5946 x64 incl Keygen [CrackingPatching]\reflect_server_plus_setup_x64.exe" 
+Start-Process -Wait -FilePath "$reflectSource\reflect_server_plus_setup_x64.exe"
 Stop-Service -Name "MacriumService"
 
 Write-Host "Iniciando Patch de Reflect"
-Start-Process -Wait -FilePath "Reflect\Macrium Reflect 8.0.5946 x64 incl Keygen [CrackingPatching]\Patch\Macrium_Reflect-7.x_8.x-patch.exe"
+Start-Process -Wait -FilePath "$reflectSource\Patch\Macrium_Reflect-7.x_8.x-patch.exe"
 
 Copy-Item -Path "Reflect\Reflect" -Destination "$user_profile\Documents" -Recurse -Force
 
