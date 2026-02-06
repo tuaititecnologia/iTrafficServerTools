@@ -1,4 +1,4 @@
-w_computer_name = "$client_code-iTraffic"
+$new_computer_name = "$client_code-iTraffic"
 $current_name = $env:COMPUTERNAME
 if ($current_name -ieq $new_computer_name) {
     Write-Host "El equipo ya tiene el nombre correcto: $current_name"
