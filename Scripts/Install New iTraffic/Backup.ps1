@@ -6,8 +6,23 @@ Import-Module ScheduledTasks
 
 $user_profile = $env:USERPROFILE
 $osVersion = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -Name 'ProductName').ProductName
-$reflectSource = "\\172.21.15.130\TuaitiBackup\Soft\Reflect\Macrium Reflect 8.0.5946 x64 incl Keygen [CrackingPatching]"
-$toolsPath = Join-Path $PSScriptRoot "..\Tools"
+$networkServer = "\\172.21.15.130"
+$reflectSource = "$networkServer\TuaitiBackup\Soft\Reflect\Macrium Reflect 8.0.5946 x64 incl Keygen [CrackingPatching]"
+$reflectTemplates = "$networkServer\TuaitiBackup\Soft\Reflect\Reflect"
+
+# Verificar acceso al recurso de red, si no hay sesión pedir credenciales
+if (-not (Test-Path $networkServer\TuaitiBackup)) {
+    Write-Host "No se detectó sesión activa en $networkServer" -ForegroundColor Yellow
+    $cred = Get-Credential -Message "Ingresá las credenciales para acceder a $networkServer"
+    try {
+        New-PSDrive -Name "TuaitiNet" -PSProvider FileSystem -Root "$networkServer\TuaitiBackup" -Credential $cred -ErrorAction Stop | Out-Null
+        Write-Host "Conexión establecida con $networkServer" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "No se pudo conectar a $networkServer : $($_.Exception.Message)" -ForegroundColor Red
+        return
+    }
+}
 
 # Desactivar antivirus temporalmente
 if ($osVersion -notmatch 'Windows Server 2012') {
@@ -58,7 +73,7 @@ Start-Process -Wait -FilePath "$reflectSource\Patch\Macrium_Reflect-7.x_8.x-patc
 Write-Host ""
 Write-Host "=== Configurando plantillas de Reflect ===" -ForegroundColor Cyan
 
-Copy-Item -Path "$toolsPath\Reflect\Reflect" -Destination "$user_profile\Documents" -Recurse -Force
+Copy-Item -Path "$reflectTemplates" -Destination "$user_profile\Documents" -Recurse -Force
 
 # Personalizar archivos XML y registro con datos del cliente
 (Get-Content -Path "$user_profile\Documents\Reflect\My Backup.xml") | ForEach-Object { $_ -replace "NIT-", "$client_code-" } | Set-Content -Path "$user_profile\Documents\Reflect\My Backup.xml"
