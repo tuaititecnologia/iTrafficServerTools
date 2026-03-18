@@ -33,9 +33,10 @@ Write-Host "6 - ComputerRename" -ForegroundColor Yellow
 Write-Host "7 - Activate" -ForegroundColor Yellow
 Write-Host "8 - AntivirusConfig" -ForegroundColor Yellow
 Write-Host "9 - Backup (Macrium Reflect)" -ForegroundColor Yellow
+Write-Host "10 - NetBird" -ForegroundColor Yellow
 Write-Host "=========================================" -ForegroundColor DarkGray
 
-$opcion = Read-Host "Ingresá una opción (U/A/1-9)"
+$opcion = Read-Host "Ingresá una opción (U/A/1-10)"
 
 switch ($opcion) {
     "A" {
@@ -47,6 +48,8 @@ switch ($opcion) {
         . .\ComputerRename.ps1
         . .\Activate.ps1
         . .\AntivirusConfig.ps1
+        . .\Backup.ps1
+        . .\NetBird.ps1
     }
     "U" { . .\Update.ps1 }
     "1" { . .\Utilities.ps1 }
@@ -58,6 +61,7 @@ switch ($opcion) {
     "7" { . .\Activate.ps1 }
     "8" { . .\AntivirusConfig.ps1 }
     "9" { . .\Backup.ps1 }
+    "10" { . .\NetBird.ps1 }
     default {
         Write-Host "Opción inválida. Finalizando." -ForegroundColor Red
         exit
