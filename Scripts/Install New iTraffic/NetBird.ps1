@@ -38,15 +38,13 @@ if (-not (Test-Path $tmpMsiPath)) {
     return
 }
 
-# Instalación silenciosa con setup key y management URL
+# Instalación silenciosa
 Write-Host "Instalando NetBird en modo silencioso..." -ForegroundColor Cyan
 $msiArgs = @(
     "/i", "`"$tmpMsiPath`"",
     "/qn",
     "/norestart",
-    "/L*v", "`"$tmpLogPath`"",
-    "SETUP_KEY=$setup_key",
-    "MANAGEMENT_URL=$ManagementUrl"
+    "/L*v", "`"$tmpLogPath`""
 )
 $install = Start-Process -FilePath "msiexec.exe" -ArgumentList $msiArgs -Wait -PassThru -NoNewWindow
 
@@ -59,6 +57,15 @@ if ($install.ExitCode -ne 0) {
 
 if (-not (Test-Path $netbirdExe)) {
     Write-Host "NetBird no quedó instalado en la ruta esperada: $netbirdExe" -ForegroundColor Red
+    return
+}
+
+# Registrar con la setup key
+Write-Host "Registrando cliente en NetBird..." -ForegroundColor Cyan
+& $netbirdExe up --management-url $ManagementUrl --setup-key $setup_key
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "NetBird no pudo registrarse. ExitCode=$LASTEXITCODE" -ForegroundColor Red
     return
 }
 
