@@ -30,12 +30,17 @@ if (-not $msiAsset) {
 }
 
 $downloadUrl = [string]$msiAsset.browser_download_url
-Write-Host "Descargando MSI desde: $downloadUrl" -ForegroundColor DarkGray
-Invoke-WebRequest -Uri $downloadUrl -OutFile $tmpMsiPath -UseBasicParsing
 
-if (-not (Test-Path $tmpMsiPath)) {
-    Write-Host "La descarga del MSI no se completó correctamente. Abortando." -ForegroundColor Red
-    return
+if (Test-Path $tmpMsiPath) {
+    Write-Host "MSI ya descargado, reutilizando: $tmpMsiPath" -ForegroundColor DarkGray
+} else {
+    Write-Host "Descargando MSI desde: $downloadUrl" -ForegroundColor DarkGray
+    Invoke-WebRequest -Uri $downloadUrl -OutFile $tmpMsiPath -UseBasicParsing
+
+    if (-not (Test-Path $tmpMsiPath)) {
+        Write-Host "La descarga del MSI no se completó correctamente. Abortando." -ForegroundColor Red
+        return
+    }
 }
 
 # Instalación silenciosa
